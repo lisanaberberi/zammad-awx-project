@@ -1,5 +1,16 @@
-Hostname,IP Address,OS,CPU Count,RAM (GB),Zammad Version,Active,Last Updated
+Hostname,IP Address,OS,CPU Count,RAM (GB),Zammad Version,Active,Last Updated,Redis,Elasticsearch,Other Packages
 {% for host in groups['zammad_servers'] | sort %}
 {% set facts = hostvars[host] %}
-{{ facts.inventory_hostname }},{{ facts.zammad_info.ip_address }},{{ facts.zammad_info.os }},{{ facts.zammad_info.cpu_count }},{{ facts.zammad_info.ram_gb }},{{ facts.zammad_info.zammad_version }},{{ facts.zammad_info.zammad_active }},{{ facts.zammad_info.last_updated }}
+{% set zi = facts.zammad_info | default({}) %}
+{{ facts.inventory_hostname | default('N/A') }},
+{{ zi.ip_address | default('N/A') }},
+{{ zi.os | default('N/A') }},
+{{ zi.cpu_count | default('N/A') }},
+{{ zi.ram_gb | default('N/A') }},
+{{ zi.zammad_version | default('N/A') }},
+{{ zi.zammad_active | default('N/A') }},
+{{ zi.last_updated | default('N/A') }},
+{{ zi.redis_version | default('N/A') }},
+{{ zi.elasticsearch_version | default('N/A') }},
+{{ zi.other_packages | join('; ') | default('N/A') }}
 {% endfor %}
