@@ -93,7 +93,7 @@
 
     - name: Compute Zammad version
       set_fact:
-        zammad_version_tmp: >-
+        zammad_version: >-
           {% if zammad_installed.stat.exists and zammad_version_file is defined and zammad_version_file.content is defined %}
           {{ zammad_version_file.content | b64decode | trim }}
           {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout %}
@@ -104,20 +104,14 @@
           NO_ZAMMAD
           {% endif %}
 
-    - name: Set Zammad version fact
-      set_fact:
-        zammad_version: "{{ zammad_version_tmp }}"
-
-      cacheable: yes
     
     - name: Set Redis version fact
       set_fact:
         redis_version: "{{ redis_version.stdout | default('-') }}"
-      cacheable: yes
     
     - name: Compute Elasticsearch version
       set_fact:
-        elasticsearch_version_tmp: >-
+        elasticsearch_version: >-
           {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined %}
           {{ elasticsearch_api.json.version.number }}
           {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout %}
@@ -127,15 +121,10 @@
           {% else %}
           -
           {% endif %}
-
-    - name: Set Elasticsearch version fact (cacheable)
-      set_fact:
-        elasticsearch_version: "{{ elasticsearch_version_tmp }}"
-      cacheable: yes
     
     - name: Parse KIT packages
       set_fact:
-        kit_packages_tmp: >-
+        kit_packages: >-
           {% set packages = {} %}
           {% set known_kit = ['KIT-Customizations', 'KIT-Filter', 'KIT-Form', 'KIT-Mobile', 'KIT-Newsletter', 'KIT-Trigger'] %}
           {% set other_pkgs = [] %}
@@ -163,10 +152,6 @@
           {{ packages }}
       when: zammad_version != 'NO_ZAMMAD'
  
-    - name: Set KIT Packages version fact (cacheable)
-      set_fact:
-        kit_packages: "{{ kit_packages_tmp }}"
-      cacheable: yes
     
     - name: Create Zammad info dict
       set_fact:
@@ -188,7 +173,6 @@
           elasticsearch_version: "{{ elasticsearch_version }}"
           kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
-      cacheable: yes
     
     - name: Display collected info
       debug:
