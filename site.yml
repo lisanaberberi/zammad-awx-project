@@ -90,18 +90,24 @@
       changed_when: false
       when: zammad_installed.stat.exists
     
+
+    - name: Compute Zammad version
+      set_fact:
+        zammad_version_tmp: >-
+          {% if zammad_installed.stat.exists and zammad_version_file is defined and zammad_version_file.content is defined %}
+          {{ zammad_version_file.content | b64decode | trim }}
+          {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout %}
+          {{ zammad_rpm_version.stdout }}
+          {% elif zammad_deb_version is defined and zammad_deb_version.stdout %}
+          {{ zammad_deb_version.stdout }}
+          {% else %}
+          NO_ZAMMAD
+          {% endif %}
+
     - name: Set Zammad version fact
       set_fact:
-        zammad_version: 
-          "{{ (zammad_installed.stat.exists and zammad_version_file is defined and zammad_version_file.content is defined) 
-              | ternary(zammad_version_file.content | b64decode | trim,
-                (zammad_rpm_version is defined and zammad_rpm_version.stdout) 
-                  | ternary(zammad_rpm_version.stdout,
-                    (zammad_deb_version is defined and zammad_deb_version.stdout) 
-                      | ternary(zammad_deb_version.stdout, 'NO_ZAMMAD')
-                  )
-              )
-          }}"
+        zammad_version: "{{ zammad_version_tmp }}"
+
       cacheable: yes
     
     - name: Set Redis version fact
@@ -109,23 +115,27 @@
         redis_version: "{{ redis_version.stdout | default('-') }}"
       cacheable: yes
     
-    - name: Set Elasticsearch version fact
+    - name: Compute Elasticsearch version
       set_fact:
-        elasticsearch_version: >-
-          {{ (elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined)
-              | ternary(elasticsearch_api.json.version.number,
-                (elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout)
-                  | ternary(elasticsearch_rpm_version.stdout,
-                    (elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout)
-                      | ternary(elasticsearch_deb_version.stdout, "-")
-                  )
-              )
-          }}
+        elasticsearch_version_tmp: >-
+          {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined %}
+          {{ elasticsearch_api.json.version.number }}
+          {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout %}
+          {{ elasticsearch_rpm_version.stdout }}
+          {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout %}
+          {{ elasticsearch_deb_version.stdout }}
+          {% else %}
+          -
+          {% endif %}
+
+    - name: Set Elasticsearch version fact (cacheable)
+      set_fact:
+        elasticsearch_version: "{{ elasticsearch_version_tmp }}"
       cacheable: yes
     
     - name: Parse KIT packages
       set_fact:
-        kit_packages: >-
+        kit_packages_tmp: >-
           {% set packages = {} %}
           {% set known_kit = ['KIT-Customizations', 'KIT-Filter', 'KIT-Form', 'KIT-Mobile', 'KIT-Newsletter', 'KIT-Trigger'] %}
           {% set other_pkgs = [] %}
@@ -152,6 +162,10 @@
           {% set _ = packages.update({'other_packages': other_pkgs | join('; ')}) %}
           {{ packages }}
       when: zammad_version != 'NO_ZAMMAD'
+ 
+    - name: Set KIT Packages version fact (cacheable)
+      set_fact:
+        kit_packages: "{{ kit_packages_tmp }}"
       cacheable: yes
     
     - name: Create Zammad info dict
