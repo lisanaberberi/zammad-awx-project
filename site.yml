@@ -281,7 +281,7 @@
 
     - name: Save host facts to JSON
       copy:
-        content: "{{ zammad_info | to_nice_json }}"
+        content: "{{ hostvars[host].zammad_info | to_nice_json }}"
         dest: "/runner/artifacts/{{ inventory_hostname }}_facts.json"
 
     - name: Display summary
