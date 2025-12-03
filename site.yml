@@ -4,39 +4,152 @@
   gather_facts: yes
   
   tasks:
-    - name: Check if Zammad service exists
-      systemd:
-        name: zammad
-      register: zammad_service
+    - name: Check if Zammad is installed
+      stat:
+        path: /opt/zammad/VERSION
+      register: zammad_installed
+    
+    - name: Get Zammad version from file
+      slurp:
+        src: /opt/zammad/VERSION
+      register: zammad_version_file
+      when: zammad_installed.stat.exists
       ignore_errors: yes
-
+    
     - name: Get Zammad version from package (RedHat)
-      shell: rpm -qa zammad 2>/dev/null | grep -oP 'zammad-\K[0-9.]+'
+      shell: rpm -qa zammad 2>/dev/null | grep -oP 'zammad-\K[0-9.\-]+'
       register: zammad_rpm_version
       ignore_errors: yes
       changed_when: false
       when: ansible_os_family == "RedHat"
-
+    
     - name: Get Zammad version from package (Debian)
       shell: dpkg -l zammad 2>/dev/null | grep zammad | awk '{print $3}'
       register: zammad_deb_version
       ignore_errors: yes
       changed_when: false
       when: ansible_os_family == "Debian"
-
-    - name: Get Zammad version from API
-      uri:
-        url: "http://localhost:3000/api/v1/version"
-        method: GET
-        timeout: 5
-      register: zammad_api_version
+    
+    - name: Check if Zammad service is running
+      shell: systemctl is-active zammad 2>/dev/null || echo "unknown"
+      register: zammad_service_status
       ignore_errors: yes
       changed_when: false
-
+    
+    - name: Check if Zammad service is enabled
+      shell: systemctl is-enabled zammad 2>/dev/null || echo "unknown"
+      register: zammad_service_enabled
+      ignore_errors: yes
+      changed_when: false
+    
+    # Redis version collection
+    - name: Check if Redis is installed
+      shell: command -v redis-cli >/dev/null 2>&1 && echo "installed" || echo "not_installed"
+      register: redis_check
+      ignore_errors: yes
+      changed_when: false
+    
+    - name: Get Redis version
+      shell: redis-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+      register: redis_version
+      ignore_errors: yes
+      changed_when: false
+      when: redis_check.stdout == "installed"
+    
+    # Elasticsearch version collection
+    - name: Check if Elasticsearch is running
+      uri:
+        url: "http://localhost:9200/"
+        method: GET
+        timeout: 5
+        status_code: [200, -1]
+      register: elasticsearch_api
+      ignore_errors: yes
+      changed_when: false
+    
+    - name: Get Elasticsearch version from package (RedHat)
+      shell: rpm -qa | grep elasticsearch | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+      register: elasticsearch_rpm_version
+      ignore_errors: yes
+      changed_when: false
+      when: ansible_os_family == "RedHat"
+    
+    - name: Get Elasticsearch version from package (Debian)
+      shell: dpkg -l | grep elasticsearch | awk '{print $3}' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1
+      register: elasticsearch_deb_version
+      ignore_errors: yes
+      changed_when: false
+      when: ansible_os_family == "Debian"
+    
+    # Get Zammad packages (KIT packages and others)
+    - name: Get installed Zammad packages
+      shell: |
+        zammad run rails r 'Package.all.each { |p| puts "#{p.name}||#{p.version}||#{p.vendor}" }'
+      register: zammad_packages
+      ignore_errors: yes
+      changed_when: false
+      when: zammad_installed.stat.exists
+    
     - name: Set Zammad version fact
       set_fact:
-        zammad_version: "{{ zammad_rpm_version.stdout or zammad_deb_version.stdout or zammad_api_version.json.version or 'Unknown' }}"
-
+        zammad_version: >-
+          {% if zammad_installed.stat.exists and zammad_version_file is defined and zammad_version_file.content is defined %}
+          {{ zammad_version_file.content | b64decode | trim }}
+          {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout %}
+          {{ zammad_rpm_version.stdout }}
+          {% elif zammad_deb_version is defined and zammad_deb_version.stdout %}
+          {{ zammad_deb_version.stdout }}
+          {% else %}
+          NO_ZAMMAD
+          {% endif %}
+    
+    - name: Set Redis version fact
+      set_fact:
+        redis_version: "{{ redis_version.stdout | default('-') }}"
+    
+    - name: Set Elasticsearch version fact
+      set_fact:
+        elasticsearch_version: >-
+          {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined %}
+          {{ elasticsearch_api.json.version.number }}
+          {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout %}
+          {{ elasticsearch_rpm_version.stdout }}
+          {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout %}
+          {{ elasticsearch_deb_version.stdout }}
+          {% else %}
+          -
+          {% endif %}
+    
+    - name: Parse KIT packages
+      set_fact:
+        kit_packages: >-
+          {% set packages = {} %}
+          {% set known_kit = ['KIT-Customizations', 'KIT-Filter', 'KIT-Form', 'KIT-Mobile', 'KIT-Newsletter', 'KIT-Trigger'] %}
+          {% set other_pkgs = [] %}
+          {% if zammad_packages is defined and zammad_packages.stdout_lines is defined %}
+            {% for line in zammad_packages.stdout_lines %}
+              {% set parts = line.split('||') %}
+              {% if parts | length == 3 %}
+                {% set pkg_name = parts[0] %}
+                {% set pkg_version = parts[1] %}
+                {% set pkg_vendor = parts[2] %}
+                {% if pkg_name in known_kit %}
+                  {% set _ = packages.update({pkg_name: pkg_version}) %}
+                {% else %}
+                  {% set _ = other_pkgs.append(pkg_name + ' ' + pkg_version + ' ' + pkg_vendor) %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          {% for kit in known_kit %}
+            {% if kit not in packages %}
+              {% set _ = packages.update({kit: '-'}) %}
+            {% endif %}
+          {% endfor %}
+          {% set _ = packages.update({'other_packages': other_pkgs | join('; ')}) %}
+          {{ packages }}
+      when: zammad_version != 'NO_ZAMMAD'
+    
     - name: Create Zammad info dict
       set_fact:
         zammad_info:
@@ -57,7 +170,7 @@
           elasticsearch_version: "{{ elasticsearch_version }}"
           kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
-
+    
     - name: Display collected info
       debug:
         msg: "{{ zammad_info }}"
@@ -72,20 +185,89 @@
         path: "/tmp/zammad_reports"
         state: directory
         mode: '0755'
-
+    
     - name: Generate JSON report
       copy:
         content: "{{ hostvars | to_nice_json }}"
         dest: "/tmp/zammad_reports/zammad_inventory_full.json"
       changed_when: false
-
+    
+    - name: Generate CSV header
+      set_fact:
+        csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
+    
+    - name: Generate CSV rows
+      set_fact:
+        csv_rows: |
+          {% for host in groups['zammad_servers'] %}
+          {% set info = hostvars[host].zammad_info | default({}) %}
+          {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
+          {% endfor %}
+    
+    - name: Generate CSV report
+      copy:
+        content: |
+          {{ csv_header }}
+          {{ csv_rows }}
+        dest: "/tmp/zammad_reports/zammad_inventory_report.csv"
+      changed_when: false
+    
+    - name: Generate formatted Markdown report
+      copy:
+        content: |
+          # Zammad Infrastructure Inventory Report
+          
+          **Generated:** {{ now(utc=True).iso8601 }}
+          **Total Hosts:** {{ groups['zammad_servers'] | length }}
+          
+          ---
+          
+          {% for host in groups['zammad_servers'] %}
+          {% set info = hostvars[host].zammad_info | default({}) %}
+          ## {{ info.hostname | default(host) }}
+          
+          - **IP Address:** {{ info.ip_address | default('Unknown') }}
+          - **Owner:** {{ info.owner | default('Unknown') }}
+          - **State:** {{ info.state | default('Unknown') }}
+          - **OS:** {{ info.os | default('Unknown') }}
+          - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
+          - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
+          - **Redis Version:** {{ info.redis_version | default('Not Available') }}
+          - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
+          - **Service Active:** {{ 'Yes' if info.zammad_active else 'No' }}
+          - **Service Enabled:** {{ 'Yes' if info.zammad_enabled else 'No' }}
+          
+          ### KIT Packages
+          {% if info.kit_packages is defined %}
+          - **KIT-Customizations:** {{ info.kit_packages['KIT-Customizations'] | default('-') }}
+          - **KIT-Filter:** {{ info.kit_packages['KIT-Filter'] | default('-') }}
+          - **KIT-Form:** {{ info.kit_packages['KIT-Form'] | default('-') }}
+          - **KIT-Mobile:** {{ info.kit_packages['KIT-Mobile'] | default('-') }}
+          - **KIT-Newsletter:** {{ info.kit_packages['KIT-Newsletter'] | default('-') }}
+          - **KIT-Trigger:** {{ info.kit_packages['KIT-Trigger'] | default('-') }}
+          
+          {% if info.kit_packages.other_packages %}
+          ### Other Packages
+          {{ info.kit_packages.other_packages }}
+          {% endif %}
+          {% endif %}
+          
+          ---
+          {% endfor %}
+        dest: "/tmp/zammad_reports/zammad_inventory_report.md"
+      changed_when: false
+    
     - name: Display summary
       debug:
         msg: |
           ========================================
           Zammad Inventory Collection Complete
           ========================================
-          Report Location: /tmp/zammad_reports/
+          Report Locations:
+            - JSON: /tmp/zammad_reports/zammad_inventory_full.json
+            - CSV:  /tmp/zammad_reports/zammad_inventory_report.csv
+            - MD:   /tmp/zammad_reports/zammad_inventory_report.md
+          
           Total Hosts: {{ groups['zammad_servers'] | length }}
           Timestamp: {{ now(utc=True).iso8601 }}
           ========================================
