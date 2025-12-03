@@ -102,10 +102,12 @@
           {% else %}
           NO_ZAMMAD
           {% endif %}
+      cacheable: yes
     
     - name: Set Redis version fact
       set_fact:
         redis_version: "{{ redis_version.stdout | default('-') }}"
+      cacheable: yes
     
     - name: Set Elasticsearch version fact
       set_fact:
@@ -119,6 +121,7 @@
           {% else %}
           -
           {% endif %}
+      cacheable: yes
     
     - name: Parse KIT packages
       set_fact:
@@ -149,6 +152,7 @@
           {% set _ = packages.update({'other_packages': other_pkgs | join('; ')}) %}
           {{ packages }}
       when: zammad_version != 'NO_ZAMMAD'
+      cacheable: yes
     
     - name: Create Zammad info dict
       set_fact:
@@ -170,6 +174,7 @@
           elasticsearch_version: "{{ elasticsearch_version }}"
           kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
+      cacheable: yes
     
     - name: Display collected info
       debug:
@@ -203,7 +208,7 @@
     - name: Generate CSV header
       set_fact:
         csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
-    
+      cacheable: yes
     - name: Generate CSV rows
       set_fact:
         csv_rows: |
@@ -211,6 +216,7 @@
           {% set info = hostvars[host].zammad_info | default({}) %}
           {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
           {% endfor %}
+      cacheable: yes
     
     - name: Generate CSV report
       copy:
