@@ -207,15 +207,13 @@
         content: >-
           {{
             dict(
-              groups['zammad_servers'] |
-              map('extract', hostvars, 'zammad_info') |
-              zip(groups['zammad_servers']) |
-              map('reverse') |
-              items2dict
+              (host, hostvars[host].zammad_info | default({})) 
+              for host in groups['zammad_servers']
             ) | to_nice_json
           }}
         dest: "/runner/artifacts/zammad_inventory_full.json"
       changed_when: false
+
     
     - name: Generate CSV header
       set_fact:
