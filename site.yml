@@ -272,5 +272,5 @@
             - MD:   /tmp/zammad_reports/zammad_inventory_report.md
           
           Total Hosts: {{ groups['zammad_servers'] | length }}
-          Timestamp: {{ now(utc=True).iso8601 }}
+          Timestamp: {{ now(utc=True).isoformat() }}
           ========================================
