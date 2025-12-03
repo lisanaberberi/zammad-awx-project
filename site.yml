@@ -220,49 +220,49 @@
         src: zammad_inventory_report.md.j2
         dest: /tmp/zammad_reports/zammad_inventory_report.md
     
-      copy:
-        content: |
-          # Zammad Infrastructure Inventory Report
+      # copy:
+      #   content: |
+      #     # Zammad Infrastructure Inventory Report
           
-          **Generated:** {{ now(utc=True).isoformat() }}
-          **Total Hosts:** {{ groups['zammad_servers'] | length }}
+      #     **Generated:** {{ now(utc=True).isoformat() }}
+      #     **Total Hosts:** {{ groups['zammad_servers'] | length }}
           
-          ---
+      #     ---
           
-          {% for host in groups['zammad_servers'] %}
-          {% set info = hostvars[host].zammad_info | default({}) %}
-          ## {{ info.hostname | default(host) }}
+      #     {% for host in groups['zammad_servers'] %}
+      #     {% set info = hostvars[host].zammad_info | default({}) %}
+      #     ## {{ info.hostname | default(host) }}
           
-          - **IP Address:** {{ info.ip_address | default('Unknown') }}
-          - **Owner:** {{ info.owner | default('Unknown') }}
-          - **State:** {{ info.state | default('Unknown') }}
-          - **OS:** {{ info.os | default('Unknown') }}
-          - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
-          - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
-          - **Redis Version:** {{ info.redis_version | default('Not Available') }}
-          - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
-          - **Service Active:** {{ 'Yes' if info.zammad_active else 'No' }}
-          - **Service Enabled:** {{ 'Yes' if info.zammad_enabled else 'No' }}
+      #     - **IP Address:** {{ info.ip_address | default('Unknown') }}
+      #     - **Owner:** {{ info.owner | default('Unknown') }}
+      #     - **State:** {{ info.state | default('Unknown') }}
+      #     - **OS:** {{ info.os | default('Unknown') }}
+      #     - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
+      #     - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
+      #     - **Redis Version:** {{ info.redis_version | default('Not Available') }}
+      #     - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
+      #     - **Service Active:** {{ 'Yes' if info.zammad_active else 'No' }}
+      #     - **Service Enabled:** {{ 'Yes' if info.zammad_enabled else 'No' }}
           
-          ### KIT Packages
-          {% if info.kit_packages is defined %}
-          - **KIT-Customizations:** {{ info.kit_packages['KIT-Customizations'] | default('-') }}
-          - **KIT-Filter:** {{ info.kit_packages['KIT-Filter'] | default('-') }}
-          - **KIT-Form:** {{ info.kit_packages['KIT-Form'] | default('-') }}
-          - **KIT-Mobile:** {{ info.kit_packages['KIT-Mobile'] | default('-') }}
-          - **KIT-Newsletter:** {{ info.kit_packages['KIT-Newsletter'] | default('-') }}
-          - **KIT-Trigger:** {{ info.kit_packages['KIT-Trigger'] | default('-') }}
+      #     ### KIT Packages
+      #     {% if info.kit_packages is defined %}
+      #     - **KIT-Customizations:** {{ info.kit_packages['KIT-Customizations'] | default('-') }}
+      #     - **KIT-Filter:** {{ info.kit_packages['KIT-Filter'] | default('-') }}
+      #     - **KIT-Form:** {{ info.kit_packages['KIT-Form'] | default('-') }}
+      #     - **KIT-Mobile:** {{ info.kit_packages['KIT-Mobile'] | default('-') }}
+      #     - **KIT-Newsletter:** {{ info.kit_packages['KIT-Newsletter'] | default('-') }}
+      #     - **KIT-Trigger:** {{ info.kit_packages['KIT-Trigger'] | default('-') }}
           
-          {% if info.kit_packages.other_packages %}
-          ### Other Packages
-          {{ info.kit_packages.other_packages }}
-          {% endif %}
-          {% endif %}
+      #     {% if info.kit_packages.other_packages %}
+      #     ### Other Packages
+      #     {{ info.kit_packages.other_packages }}
+      #     {% endif %}
+      #     {% endif %}
           
-          ---
-          {% endfor %}
-        dest: "/tmp/zammad_reports/zammad_inventory_report.md"
-      changed_when: false
+      #     ---
+      #     {% endfor %}
+      #   dest: "/tmp/zammad_reports/zammad_inventory_report.md"
+      # changed_when: false
     
     - name: Display summary
       debug:
