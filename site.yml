@@ -187,7 +187,12 @@
         path: "/runner/artifacts/"
         state: directory
         mode: '0755'
-      delegate_to: localhost
+    # - name: Create reports directory
+    #   file:
+    #     path: "/runner/artifacts/"
+    #     state: directory
+    #     mode: '0755'
+    #   delegate_to: localhost
     
     - name: Generate JSON report
       copy:
@@ -272,3 +277,20 @@
           Total Hosts: {{ groups['zammad_servers'] | length }}
           Timestamp: {{ now(utc=True).isoformat() }}
           ========================================
+
+    - name: Set statistics for AWX dashboard
+      set_stats:
+        data:
+          zammad_hosts_count: "{{ groups['zammad_servers'] | length }}"
+          zammad_versions: |
+            {% set versions = {} %}
+            {% for host in groups['zammad_servers'] %}
+            {% set version = hostvars[host].zammad_info.zammad_version | default('unknown') %}
+            {% if version in versions %}
+              {% set _ = versions.update({version: versions[version] + 1}) %}
+            {% else %}
+              {% set _ = versions.update({version: 1}) %}
+            {% endif %}
+            {% endfor %}
+            {{ versions }}
+          redis_installed_count: "{{ groups['zammad_servers'] | selectattr('hostvars.zammad_info.redis_version', 'defined') | list | length }}"
