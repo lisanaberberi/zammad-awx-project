@@ -178,6 +178,8 @@
 - name: Generate Centralized Reports
   hosts: localhost
   gather_facts: no
+  connection: local
+  become: no
   
   tasks:
     - name: Create reports directory
@@ -185,6 +187,7 @@
         path: "/tmp/zammad_reports"
         state: directory
         mode: '0755'
+      delegate_to: localhost
     
     - name: Generate JSON report
       copy:
