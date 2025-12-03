@@ -204,7 +204,16 @@
     
     - name: Generate JSON report
       copy:
-        content: "{{ hostvars | to_nice_json }}"
+        content: >-
+          {{
+            dict(
+              groups['zammad_servers'] |
+              map('extract', hostvars, 'zammad_info') |
+              zip(groups['zammad_servers']) |
+              map('reverse') |
+              items2dict
+            ) | to_nice_json
+          }}
         dest: "/runner/artifacts/zammad_inventory_full.json"
       changed_when: false
     
