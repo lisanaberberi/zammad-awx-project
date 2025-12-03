@@ -279,10 +279,19 @@
           {% endfor %}
       changed_when: false
 
-    - name: Save host facts to JSON
+    - name: Save all host facts to JSON
       copy:
-        content: "{{ hostvars[host].zammad_info | to_nice_json }}"
-        dest: "/runner/artifacts/{{ inventory_hostname }}_facts.json"
+        content: >-
+          {{
+            dict(
+              groups['zammad_servers'] |
+              map('extract', hostvars, 'zammad_info') |
+              zip(groups['zammad_servers']) |
+              map('reverse') |
+              list
+            ) | to_nice_json
+          }}
+        dest: "/runner/artifacts/zammad_inventory_full.json"
 
     - name: Display summary
       debug:
