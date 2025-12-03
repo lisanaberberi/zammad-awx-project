@@ -90,6 +90,11 @@
       changed_when: false
       when: zammad_installed.stat.exists
     
+    - name: Ensure fact cache directory exists
+      file:
+        path: /tmp/awx_fact_cache
+        state: directory
+        mode: '0777'
 
     - name: Compute Zammad version
       set_fact:
@@ -206,7 +211,7 @@
     - name: Generate CSV header
       set_fact:
         csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
-      cacheable: yes
+
     - name: Generate CSV rows
       set_fact:
         csv_rows: |
@@ -214,7 +219,7 @@
           {% set info = hostvars[host].zammad_info | default({}) %}
           {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
           {% endfor %}
-      cacheable: yes
+
     
     - name: Generate CSV report
       copy:
@@ -266,7 +271,11 @@
           {% endfor %}
       changed_when: false
 
-    
+    - name: Save host facts to JSON
+      copy:
+        content: "{{ zammad_info | to_nice_json }}"
+        dest: "/runner/artifacts/{{ inventory_hostname }}_facts.json"
+
     - name: Display summary
       debug:
         msg: |
@@ -281,6 +290,7 @@
           Total Hosts: {{ groups['zammad_servers'] | length }}
           Timestamp: {{ now(utc=True).isoformat() }}
           ========================================
+
 
     - name: Set statistics for AWX dashboard
       set_stats:
