@@ -184,7 +184,7 @@
   tasks:
     - name: Create reports directory
       file:
-        path: "/runner/artifacts/reports/"
+        path: "/runner/artifacts/"
         state: directory
         mode: '0755'
       delegate_to: localhost
@@ -192,7 +192,7 @@
     - name: Generate JSON report
       copy:
         content: "{{ hostvars | to_nice_json }}"
-        dest: "/runner/artifacts/reports/zammad_inventory_full.json"
+        dest: "/runner/artifacts/zammad_inventory_full.json"
       changed_when: false
     
     - name: Generate CSV header
@@ -212,12 +212,12 @@
         content: |
           {{ csv_header }}
           {{ csv_rows }}
-        dest: "/runner/artifacts/reports/zammad_inventory_report.csv"
+        dest: "/runner/artifacts/zammad_inventory_report.csv"
       changed_when: false
     
     - name: Generate formatted Markdown report
       copy:
-        dest: /runner/artifacts/reports/zammad_inventory_report.md
+        dest: /runner/artifacts/zammad_inventory_report.md
         content: |
           # Zammad Infrastructure Inventory Report
 
@@ -265,9 +265,9 @@
           Zammad Inventory Collection Complete
           ========================================
           Report Locations:
-            - JSON: /runner/artifacts/reports/zammad_inventory_full.json
-            - CSV:  /runner/artifacts/reports/zammad_inventory_report.csv
-            - MD:   /runner/artifacts/reports/zammad_inventory_report.md
+            - JSON: /runner/artifacts/zammad_inventory_full.json
+            - CSV:  /runner/artifacts/zammad_inventory_report.csv
+            - MD:   /runner/artifacts/zammad_inventory_report.md
           
           Total Hosts: {{ groups['zammad_servers'] | length }}
           Timestamp: {{ now(utc=True).isoformat() }}
