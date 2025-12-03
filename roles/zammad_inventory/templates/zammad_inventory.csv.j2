@@ -1,0 +1,5 @@
+Hostname,IP Address,OS,CPU Count,RAM (GB),Zammad Version,Active,Last Updated
+{% for host in groups['zammad_servers'] | sort %}
+{% set facts = hostvars[host] %}
+{{ facts.inventory_hostname }},{{ facts.zammad_info.ip_address }},{{ facts.zammad_info.os }},{{ facts.zammad_info.cpu_count }},{{ facts.zammad_info.ram_gb }},{{ facts.zammad_info.zammad_version }},{{ facts.zammad_info.zammad_active }},{{ facts.zammad_info.last_updated }}
+{% endfor %}

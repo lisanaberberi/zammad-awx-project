@@ -1,0 +1,86 @@
+---
+- name: Collect Zammad Instance Information
+  hosts: zammad_servers
+  gather_facts: yes
+  
+  tasks:
+    - name: Check if Zammad service exists
+      systemd:
+        name: zammad
+      register: zammad_service
+      ignore_errors: yes
+
+    - name: Get Zammad version from package (RedHat)
+      shell: rpm -qa zammad 2>/dev/null | grep -oP 'zammad-\K[0-9.]+'
+      register: zammad_rpm_version
+      ignore_errors: yes
+      changed_when: false
+      when: ansible_os_family == "RedHat"
+
+    - name: Get Zammad version from package (Debian)
+      shell: dpkg -l zammad 2>/dev/null | grep zammad | awk '{print $3}'
+      register: zammad_deb_version
+      ignore_errors: yes
+      changed_when: false
+      when: ansible_os_family == "Debian"
+
+    - name: Get Zammad version from API
+      uri:
+        url: "http://localhost:3000/api/v1/version"
+        method: GET
+        timeout: 5
+      register: zammad_api_version
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Set Zammad version fact
+      set_fact:
+        zammad_version: "{{ zammad_rpm_version.stdout or zammad_deb_version.stdout or zammad_api_version.json.version or 'Unknown' }}"
+
+    - name: Create Zammad info dict
+      set_fact:
+        zammad_info:
+          hostname: "{{ inventory_hostname }}"
+          ip_address: "{{ ansible_default_ipv4.address | default('Unknown') }}"
+          os: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
+          os_family: "{{ ansible_os_family }}"
+          kernel: "{{ ansible_kernel }}"
+          cpu_count: "{{ ansible_processor_vcpus }}"
+          ram_mb: "{{ ansible_memtotal_mb }}"
+          ram_gb: "{{ (ansible_memtotal_mb / 1024) | int }}"
+          zammad_version: "{{ zammad_version }}"
+          zammad_active: "{{ zammad_service.state == 'started' }}"
+          zammad_enabled: "{{ zammad_service.enabled | default(false) }}"
+          last_updated: "{{ ansible_date_time.iso8601 }}"
+
+    - name: Display collected info
+      debug:
+        msg: "{{ zammad_info }}"
+
+- name: Generate Centralized Reports
+  hosts: localhost
+  gather_facts: no
+  
+  tasks:
+    - name: Create reports directory
+      file:
+        path: "/tmp/zammad_reports"
+        state: directory
+        mode: '0755'
+
+    - name: Generate JSON report
+      copy:
+        content: "{{ hostvars | to_nice_json }}"
+        dest: "/tmp/zammad_reports/zammad_inventory_full.json"
+      changed_when: false
+
+    - name: Display summary
+      debug:
+        msg: |
+          ========================================
+          Zammad Inventory Collection Complete
+          ========================================
+          Report Location: /tmp/zammad_reports/
+          Total Hosts: {{ groups['zammad_servers'] | length }}
+          Timestamp: {{ now(utc=True).iso8601 }}
+          ========================================
