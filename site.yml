@@ -207,8 +207,9 @@
         content: >-
           {{
             dict(
-              (host, hostvars[host].zammad_info | default({})) 
-              for host in groups['zammad_servers']
+              groups['zammad_servers'] | zip(
+                groups['zammad_servers'] | map('extract', hostvars, 'zammad_info') | list
+              ) | list
             ) | to_nice_json
           }}
         dest: "/runner/artifacts/zammad_inventory_full.json"
