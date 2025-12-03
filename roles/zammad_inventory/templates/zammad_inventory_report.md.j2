@@ -1,0 +1,13 @@
+# Zammad Infrastructure Inventory Report
+
+**Generated:** {{ now(utc=True).isoformat() }}
+**Total Hosts:** {{ groups['zammad_servers'] | length }}
+
+{% for host in groups['zammad_servers'] | sort %}
+{% set zi = hostvars[host].zammad_info | default({}) %}
+**Hostname:** {{ hostvars[host].inventory_hostname | default('N/A') }}  
+**Redis:** {{ zi.redis_version | default('N/A') }}  
+**Elasticsearch:** {{ zi.elasticsearch_version | default('N/A') }}  
+**Other Packages:** {{ zi.other_packages | default([]) | join('; ') }}  
+
+{% endfor %}

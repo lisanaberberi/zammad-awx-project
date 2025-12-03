@@ -216,6 +216,10 @@
       changed_when: false
     
     - name: Generate formatted Markdown report
+      template:
+        src: zammad_inventory_report.md.j2
+        dest: /tmp/zammad_reports/zammad_inventory_report.md
+    
       copy:
         content: |
           # Zammad Infrastructure Inventory Report
