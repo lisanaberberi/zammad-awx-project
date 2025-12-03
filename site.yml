@@ -41,7 +41,9 @@
       set_fact:
         zammad_info:
           hostname: "{{ inventory_hostname }}"
-          ip_address: "{{ ansible_default_ipv4.address | default('Unknown') }}"
+          ip_address: "{{ hostvars[inventory_hostname].ansible_host | default(ansible_default_ipv4.address | default('Unknown')) }}"
+          owner: "{{ hostvars[inventory_hostname].owner | default('Unknown') }}"
+          state: "{{ hostvars[inventory_hostname].state | default('Unknown') }}"
           os: "{{ ansible_distribution }} {{ ansible_distribution_version }}"
           os_family: "{{ ansible_os_family }}"
           kernel: "{{ ansible_kernel }}"
@@ -49,8 +51,11 @@
           ram_mb: "{{ ansible_memtotal_mb }}"
           ram_gb: "{{ (ansible_memtotal_mb / 1024) | int }}"
           zammad_version: "{{ zammad_version }}"
-          zammad_active: "{{ zammad_service.state == 'started' }}"
-          zammad_enabled: "{{ zammad_service.enabled | default(false) }}"
+          zammad_active: "{{ zammad_service_status.stdout == 'active' if zammad_service_status is defined else false }}"
+          zammad_enabled: "{{ zammad_service_enabled.stdout == 'enabled' if zammad_service_enabled is defined else false }}"
+          redis_version: "{{ redis_version }}"
+          elasticsearch_version: "{{ elasticsearch_version }}"
+          kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
 
     - name: Display collected info
