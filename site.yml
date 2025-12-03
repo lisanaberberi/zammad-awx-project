@@ -220,7 +220,7 @@
         content: |
           # Zammad Infrastructure Inventory Report
           
-          **Generated:** {{ now(utc=True).iso8601 }}
+          **Generated:** {{ now(utc=True).isoformat() }}
           **Total Hosts:** {{ groups['zammad_servers'] | length }}
           
           ---
