@@ -323,7 +323,7 @@
         
         - name: Get host ID from AWX API
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/?name={{ item }}"
+            url: "{{ awx_url }}/api/v2/hosts/?name={{ item }}" 
             method: GET
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
