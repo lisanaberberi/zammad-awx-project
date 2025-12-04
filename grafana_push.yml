@@ -1,0 +1,115 @@
+---
+- name: Extract AWX Host Data and Push to Grafana
+  hosts: localhost
+  gather_facts: no
+  connection: local
+  become: no
+
+  vars:
+    postgres_host: "{{ lookup('env', 'AWX_POSTGRES_HOST') }}"
+    postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') }}"
+    postgres_db: "{{ lookup('env', 'AWX_POSTGRES_DB') }}"
+    postgres_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default(lookup('env', 'AWX_POSTGRES_USER') | default('awx')) }}"
+    postgres_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') | default(lookup('env', 'AWX_POSTGRES_PASSWORD')) }}"
+    inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
+    grafana_url: "{{ lookup('env', 'GRAFANA_URL') }}"
+    grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') | default(lookup('env', 'ANSIBLE_GRAFANA_TOKEN')) }}"
+
+  pre_tasks:
+    - name: Validate required variables
+      assert:
+        that:
+          - postgres_host is defined
+          - grafana_url is defined
+          - grafana_token is defined
+        fail_msg: "Missing required environment variables"
+
+  tasks:
+    - name: Install required Python packages
+      pip:
+        name:
+          - psycopg2-binary
+          - requests
+        state: present
+      ignore_errors: yes
+
+    - name: Query AWX PostgreSQL database
+      postgresql_query:
+        db: "{{ postgres_db }}"
+        port: "{{ postgres_port }}"
+        login_host: "{{ postgres_host }}"
+        login_user: "{{ postgres_user }}"
+        login_password: "{{ postgres_password }}"
+        query: |
+          SELECT 
+            h.id,
+            h.name,
+            h.variables
+          FROM main_host h
+          JOIN main_inventory i ON h.inventory_id = i.id
+          WHERE i.name = %s
+          ORDER BY h.name
+        named_args:
+          inventory: "{{ inventory_name }}"
+      register: db_query_result
+      ignore_errors: yes
+
+    - name: Set hosts data
+      set_fact:
+        hosts_data: "{{ db_query_result.query_result | default([]) }}"
+
+    - name: DEBUG - Show queried hosts
+      debug:
+        msg: |
+          Found {{ hosts_data | length }} hosts
+          {% for host in hosts_data %}
+          - {{ host.name }}
+          {% endfor %}
+
+    - name: Push host data to Grafana as annotations
+      uri:
+        url: "{{ grafana_url }}/api/annotations"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ grafana_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          dashboardId: 0
+          panelId: 0
+          tags:
+            - "zammad_inventory"
+            - "{{ item.name }}"
+          text: |
+            **Host:** {{ item.name }}
+            Zammad: {{ (item.variables | from_json).zammad_info.zammad_version | default('-') }}
+            Redis: {{ (item.variables | from_json).redis_info.version | default('-') }}
+            Elasticsearch: {{ (item.variables | from_json).elasticsearch_info.version | default('-') }}
+            RAM: {{ (item.variables | from_json).zammad_info.ram_gb | default('-') }} GB
+            Status: {{ 'Active' if (item.variables | from_json).zammad_info.zammad_active else 'Inactive' }}
+            OS: {{ (item.variables | from_json).zammad_info.os | default('-') }}
+            IP: {{ (item.variables | from_json).zammad_info.ip_address | default('-') }}
+            Owner: {{ (item.variables | from_json).zammad_info.owner | default('-') }}
+          time: "{{ ansible_date_time.epoch | int }}000"
+        validate_certs: no
+      loop: "{{ hosts_data }}"
+      when: 
+        - hosts_data | length > 0
+      ignore_errors: yes
+
+    - name: Display summary
+      debug:
+        msg: |
+          ========================================
+          AWX to Grafana Push Complete
+          ========================================
+          Hosts processed: {{ hosts_data | length }}
+          Grafana URL: {{ grafana_url }}
+          
+          Annotations created for:
+          {% for host in hosts_data %}
+          - {{ host.name }}
+          {% endfor %}
+          
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          ========================================
