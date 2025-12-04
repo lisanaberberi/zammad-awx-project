@@ -360,28 +360,39 @@
           loop: "{{ groups['zammad_servers'] }}"
           when: awx_url is defined
           ignore_errors: yes
+
+        - name: Build variables as YAML
+          set_fact:
+            awx_vars: >
+              {{ {
+                  'zammad_info': hostvars[item].zammad_info | default({}),
+                  'redis_info': hostvars[item].redis_info | default({}),
+                  'elasticsearch_info': hostvars[item].elasticsearch_info | default({}),
+                  'kit_packages': hostvars[item].kit_packages | default({}),
+                  'hostname': hostvars[item].hostname | default(''),
+                  'ip_address': hostvars[item].ip_address | default(''),
+                  'os': hostvars[item].os | default(''),
+                  'os_family': hostvars[item].os_family | default('')
+              } | to_nice_yaml(indent=2) }}
+          loop: "{{ groups['zammad_servers'] }}"
+          loop_control:
+            loop_var: item
+          register: yaml_vars
         
         - name: Update host variables in AWX
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/{{ item.json.results[0].id }}/"
+            url: "{{ awx_url }}/api/v2/hosts/{{ host_lookup.results[idx].json.results[0].id }}/"
             method: PATCH
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
             body_format: json
             body:
-              variables: |
-                zammad_info: {{ hostvars[groups['zammad_servers'][idx]].zammad_info | to_nice_yaml(indent=2) }}
-                redis_info: {{ hostvars[groups['zammad_servers'][idx]].redis_info | to_nice_yaml(indent=2) }}
-                elasticsearch_info: {{ hostvars[groups['zammad_servers'][idx]].elasticsearch_info | to_nice_yaml(indent=2) }}
-                kit_packages: {{ hostvars[groups['zammad_servers'][idx]].kit_packages | to_nice_yaml(indent=2) }}
+              variables: "{{ yaml_vars.results[idx].ansible_facts.awx_vars }}"
             validate_certs: no
             force_basic_auth: yes
           loop: "{{ host_lookup.results }}"
           loop_control:
             index_var: idx
-          when:
-            - awx_url is defined
-            - item.json.results | length > 0
           ignore_errors: yes
       ignore_errors: yes
 
