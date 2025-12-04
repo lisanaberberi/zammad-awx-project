@@ -6,141 +6,118 @@
   become: no
 
   vars:
-    postgres_host: "{{ AWX_POSTGRES_HOST | default(lookup('env', 'AWX_POSTGRES_HOST')) }}"
-    postgres_port: "{{ AWX_POSTGRES_PORT | default(lookup('env', 'AWX_POSTGRES_PORT') | default('5432')) }}"
-    postgres_db: "{{ AWX_POSTGRES_DB | default(lookup('env', 'AWX_POSTGRES_DB') | default('awx')) }}"
-    postgres_user: "{{ AWX_POSTGRES_USER | default(lookup('env', 'AWX_POSTGRES_USER') | default('awx')) }}"
-    postgres_password: "{{ AWX_POSTGRES_PASSWORD | default(lookup('env', 'AWX_POSTGRES_PASSWORD')) }}"
+    postgres_host: "{{ AWX_POSTGRES_HOST | default('awx-postgres-15') }}"
+    postgres_port: "{{ AWX_POSTGRES_PORT | default('5432') }}"
+    postgres_db: "{{ AWX_POSTGRES_DB | default('awx') }}"
+    postgres_user: "{{ AWX_POSTGRES_USER | default('awx') }}"
+    postgres_password: ""
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
-    grafana_url: "{{ GRAFANA_URL | default(lookup('env', 'GRAFANA_URL')) }}"
-    grafana_token: "{{ GRAFANA_TOKEN | default(lookup('env', 'GRAFANA_TOKEN')) }}"
-
-  pre_tasks:
-    - name: Validate required variables
-      assert:
-        that:
-          - postgres_host is defined and postgres_host | length > 0
-          - grafana_url is defined and grafana_url | length > 0
-          - grafana_token is defined and grafana_token | length > 0
-        fail_msg: "Missing required environment variables"
+    grafana_url: "{{ GRAFANA_URL | default('') }}"
+    grafana_token: "{{ GRAFANA_TOKEN | default('') }}"
 
   tasks:
-    - name: Get PostgreSQL credentials from Kubernetes secret
-      shell: |
-        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data}' | jq -r 'to_entries | map("\(.key)=\(.value | @base64d)") | .[]'
-      register: k8s_creds_result
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Parse Kubernetes credentials
-      set_fact:
-        k8s_creds: "{{ (k8s_creds_result.stdout_lines | map('split', '=') | list | map('list2dict', [0, 1]) | combine) | default({}) }}"
-      ignore_errors: yes
-
-    - name: Set postgres credentials from Kubernetes
-      set_fact:
-        postgres_host: "{{ k8s_creds.get('host', postgres_host) }}"
-        postgres_port: "{{ k8s_creds.get('port', postgres_port) }}"
-        postgres_db: "{{ k8s_creds.get('database', postgres_db) }}"
-        postgres_user: "{{ k8s_creds.get('username', postgres_user) }}"
-        postgres_password: "{{ k8s_creds.get('password', postgres_password) }}"
-      when: k8s_creds_result.rc == 0
-
-    - name: Debug - Show connection details
-      debug:
-        msg: |
-          Host: {{ postgres_host }}
-          Port: {{ postgres_port }}
-          DB: {{ postgres_db }}
-          User: {{ postgres_user }}
-          Password length: {{ postgres_password | length }} chars
-      when: postgres_password is defined
+    - name: Install required Python packages
       pip:
         name:
           - psycopg2-binary
-          - requests
         state: present
       ignore_errors: yes
 
-    - name: Query AWX PostgreSQL database using Python
-      block:
-        - name: Create Python script to query database
-          copy:
-            content: |
-              #!/usr/bin/env python3
-              import json
-              import psycopg2
-              import sys
-              
-              try:
-                  conn = psycopg2.connect(
-                      host="{{ postgres_host }}",
-                      port="{{ postgres_port }}",
-                      database="{{ postgres_db }}",
-                      user="{{ postgres_user }}",
-                      password="{{ postgres_password }}"
-                  )
-                  
-                  cur = conn.cursor()
-                  cur.execute("""
-                      SELECT json_agg(row_to_json(t))
-                      FROM (
-                          SELECT 
-                              h.id,
-                              h.name,
-                              h.variables
-                          FROM main_host h
-                          JOIN main_inventory i ON h.inventory_id = i.id
-                          WHERE i.name = %s
-                          ORDER BY h.name
-                      ) t
-                  """, ("{{ inventory_name }}",))
-                  
-                  result = cur.fetchone()
-                  if result and result[0]:
-                      print(json.dumps(result[0]))
-                  else:
-                      print("[]")
-                  
-                  cur.close()
-                  conn.close()
-              except Exception as e:
-                  print(json.dumps({"error": str(e)}))
-                  sys.exit(1)
-            dest: /tmp/query_awx_db.py
-            mode: '0755'
-          ignore_errors: yes
-
-        - name: Run Python query script
-          shell: python3 /tmp/query_awx_db.py
-          register: db_query_result
-          ignore_errors: yes
-          changed_when: false
+    - name: Get PostgreSQL credentials from Kubernetes secret
+      shell: |
+        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data.password}' | base64 -d
+      register: k8s_password_result
       ignore_errors: yes
+      changed_when: false
 
-    - name: Parse database query result
+    - name: Set password from Kubernetes secret
+      set_fact:
+        postgres_password: "{{ k8s_password_result.stdout }}"
+      when: k8s_password_result.rc == 0
+
+    - name: Show connection details
+      debug:
+        msg: |
+          Connecting to PostgreSQL:
+          Host: {{ postgres_host }}
+          Port: {{ postgres_port }}
+          Database: {{ postgres_db }}
+          User: {{ postgres_user }}
+          Password: ({{ postgres_password | length }} chars)
+
+    - name: Create Python script to query database
+      copy:
+        content: |
+          #!/usr/bin/env python3
+          import json
+          import psycopg2
+          import sys
+          
+          postgres_host = "{{ postgres_host }}"
+          postgres_port = "{{ postgres_port }}"
+          postgres_db = "{{ postgres_db }}"
+          postgres_user = "{{ postgres_user }}"
+          postgres_password = "{{ postgres_password }}"
+          inventory_name = "{{ inventory_name }}"
+          
+          try:
+              conn = psycopg2.connect(
+                  host=postgres_host,
+                  port=int(postgres_port),
+                  database=postgres_db,
+                  user=postgres_user,
+                  password=postgres_password
+              )
+              
+              cur = conn.cursor()
+              cur.execute("""
+                  SELECT json_agg(row_to_json(t))
+                  FROM (
+                      SELECT 
+                          h.id,
+                          h.name,
+                          h.variables
+                      FROM main_host h
+                      JOIN main_inventory i ON h.inventory_id = i.id
+                      WHERE i.name = %s
+                      ORDER BY h.name
+                  ) t
+              """, (inventory_name,))
+              
+              result = cur.fetchone()
+              if result and result[0]:
+                  print(json.dumps(result[0]))
+              else:
+                  print("[]")
+              
+              cur.close()
+              conn.close()
+          except Exception as e:
+              print(json.dumps([{"error": str(e)}]))
+              sys.exit(0)
+        dest: /tmp/query_awx_db.py
+        mode: '0755'
+
+    - name: Run Python query script
+      shell: python3 /tmp/query_awx_db.py
+      register: db_query_result
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Set hosts data
       set_fact:
         hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
       ignore_errors: yes
-      when: db_query_result.stdout is defined and db_query_result.stdout | length > 0
 
-    - name: Set empty list if query failed
-      set_fact:
-        hosts_data: []
-      when: hosts_data is not defined or hosts_data is none
-
-    - name: DEBUG - Show queried hosts
+    - name: Show queried hosts
       debug:
-        msg: |
-          Found {{ hosts_data | length }} hosts
-          {% for host in hosts_data %}
-          - {{ host.name }}
-          {% endfor %}
+        msg: "Found {{ hosts_data | length }} hosts from AWX"
 
-    - name: Show database query error if failed
+    - name: List hosts
       debug:
-        msg: "Database query output: {{ db_query_result.stdout }}"
-      when: db_query_result.rc | default(0) != 0
+        msg: "- {{ item.name }}"
+      loop: "{{ hosts_data }}"
+      when: hosts_data | length > 0
 
     - name: Push host data to Grafana as annotations
       uri:
@@ -169,22 +146,18 @@
           time: "{{ ansible_date_time.epoch | int }}000"
         validate_certs: no
       loop: "{{ hosts_data }}"
-      when: hosts_data | length > 0
+      when: 
+        - hosts_data | length > 0
+        - grafana_token | length > 0
       ignore_errors: yes
 
-    - name: Display summary
+    - name: Summary
       debug:
         msg: |
           ========================================
-          AWX to Grafana Push Complete
+          Zammad to Grafana Push Complete
           ========================================
           Hosts processed: {{ hosts_data | length }}
           Grafana URL: {{ grafana_url }}
-          
-          Annotations created for:
-          {% for host in hosts_data %}
-          - {{ host.name }}
-          {% endfor %}
-          
-          Timestamp: {{ ansible_date_time.iso8601 }} 
+          Timestamp: {{ ansible_date_time.iso8601 }}
           ========================================
