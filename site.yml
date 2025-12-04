@@ -185,15 +185,28 @@
       debug:
         msg: "{{ zammad_info }}"
     
-    - name: Set all facts as cacheable facts
+    - name: Create Redis info dict
+      set_fact:
+        redis_info:
+          version: "{{ redis_version }}"
+          installed: "{{ 'yes' if redis_version != '-' else 'no' }}"
+      args:
+        cacheable: yes
+    
+    - name: Create Elasticsearch info dict
+      set_fact:
+        elasticsearch_info:
+          version: "{{ elasticsearch_version }}"
+          installed: "{{ 'yes' if elasticsearch_version != '-' else 'no' }}"
+      args:
+        cacheable: yes
+    
+    - name: Set all facts as cacheable for AWX
       set_fact:
         zammad_info: "{{ zammad_info }}"
-        zammad_version: "{{ zammad_version }}"
-        redis_version: "{{ redis_version }}"
-        elasticsearch_version: "{{ elasticsearch_version }}"
+        redis_info: "{{ redis_info }}"
+        elasticsearch_info: "{{ elasticsearch_info }}"
         kit_packages: "{{ kit_packages | default({}) }}"
-        zammad_service_status: "{{ zammad_service_status.stdout | default('unknown') }}"
-        zammad_service_enabled: "{{ zammad_service_enabled.stdout | default('unknown') }}"
       args:
         cacheable: yes
 
@@ -317,41 +330,42 @@
           ========================================
 
 
-    - name: Update host variables in AWX inventory
+    - name: DEBUG - Check if facts are cached
+      debug:
+        msg: "Host {{ item }} has zammad_info: {{ hostvars[item].zammad_info is defined }}"
+      loop: "{{ groups['zammad_servers'] }}"
+    
+    - name: Push collected facts to AWX inventory
       block:
-        - name: Get AWX token
-          set_fact:
-            awx_token: "{{ lookup('env', 'TOWER_OAUTH_TOKEN') | default(lookup('env', 'ANSIBLE_TOWER_OAUTH_TOKEN')) }}"
-        
-        - name: Update each host with collected facts
+        - name: Get inventory ID from AWX API
           uri:
-            url: "{{ awx_host }}/api/v2/hosts/?name={{ item }}"
+            url: "https://{{ ansible_host | default('localhost') }}/api/v2/inventories/?name=Demo%20Inventory"
             method: GET
-            headers:
-              Authorization: "Bearer {{ awx_token }}"
+            user: "{{ lookup('env', 'TOWER_USERNAME') | default('admin') }}"
+            password: "{{ lookup('env', 'TOWER_PASSWORD') | default('admin') }}"
             validate_certs: no
-          register: host_lookup
-          loop: "{{ groups['zammad_servers'] }}"
-          when: awx_token
+            force_basic_auth: yes
+          register: inventory_result
           ignore_errors: yes
         
-        - name: Patch host with zammad facts
+        - name: Update host facts in AWX
           uri:
-            url: "{{ awx_host }}/api/v2/hosts/{{ host_lookup.results[idx].json.results[0].id }}/variables/"
+            url: "https://{{ ansible_host | default('localhost') }}/api/v2/hosts/?name={{ item }}"
             method: PATCH
-            headers:
-              Authorization: "Bearer {{ awx_token }}"
+            user: "{{ lookup('env', 'TOWER_USERNAME') | default('admin') }}"
+            password: "{{ lookup('env', 'TOWER_PASSWORD') | default('admin') }}"
             body_format: json
             body:
-              zammad_info: "{{ hostvars[item].zammad_info | default({}) }}"
+              variables: |
+                ---
+                zammad_info: {{ hostvars[item].zammad_info | default({}) | to_json }}
+                redis_info: {{ hostvars[item].redis_info | default({}) | to_json }}
+                elasticsearch_info: {{ hostvars[item].elasticsearch_info | default({}) | to_json }}
+                kit_packages: {{ hostvars[item].kit_packages | default({}) | to_json }}
             validate_certs: no
+            force_basic_auth: yes
           loop: "{{ groups['zammad_servers'] }}"
-          loop_control:
-            index_var: idx
-          when: awx_token and host_lookup.results[idx].json.results | length > 0
           ignore_errors: yes
-      vars:
-        awx_host: "{{ lookup('env', 'TOWER_HOST') | default('https://localhost') }}"
       ignore_errors: yes
     
     - name: Set statistics for AWX dashboard
