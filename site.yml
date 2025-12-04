@@ -17,14 +17,14 @@
       ignore_errors: yes
     
     - name: Get Zammad version from package (RedHat)
-      shell: rpm -qa zammad 2>/dev/null | grep -oP 'zammad-\K[0-9.\-]+'
+      shell: rpm -qa zammad 2>/dev/null | grep -oP 'zammad-\K[0-9.\-]+' || echo ""
       register: zammad_rpm_version
       ignore_errors: yes
       changed_when: false
       when: ansible_os_family == "RedHat"
     
     - name: Get Zammad version from package (Debian)
-      shell: dpkg -l zammad 2>/dev/null | grep zammad | awk '{print $3}'
+      shell: dpkg -l zammad 2>/dev/null | grep zammad | awk '{print $3}' || echo ""
       register: zammad_deb_version
       ignore_errors: yes
       changed_when: false
@@ -101,9 +101,9 @@
         zammad_version: >-
           {% if zammad_installed.stat.exists and zammad_version_file is defined and zammad_version_file.content is defined %}
           {{ zammad_version_file.content | b64decode | trim }}
-          {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout %}
+          {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout is defined and zammad_rpm_version.stdout | length > 0 %}
           {{ zammad_rpm_version.stdout }}
-          {% elif zammad_deb_version is defined and zammad_deb_version.stdout %}
+          {% elif zammad_deb_version is defined and zammad_deb_version.stdout is defined and zammad_deb_version.stdout | length > 0 %}
           {{ zammad_deb_version.stdout }}
           {% else %}
           NO_ZAMMAD
@@ -178,19 +178,13 @@
           elasticsearch_version: "{{ elasticsearch_version }}"
           kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
-      args:
         cacheable: yes
-    
-    - name: Display collected info
-      debug:
-        msg: "{{ zammad_info }}"
     
     - name: Create Redis info dict
       set_fact:
         redis_info:
           version: "{{ redis_version }}"
           installed: "{{ 'yes' if redis_version != '-' else 'no' }}"
-      args:
         cacheable: yes
     
     - name: Create Elasticsearch info dict
@@ -198,17 +192,11 @@
         elasticsearch_info:
           version: "{{ elasticsearch_version }}"
           installed: "{{ 'yes' if elasticsearch_version != '-' else 'no' }}"
-      args:
         cacheable: yes
     
-    - name: Set all facts as cacheable for AWX
-      set_fact:
-        zammad_info: "{{ zammad_info }}"
-        redis_info: "{{ redis_info }}"
-        elasticsearch_info: "{{ elasticsearch_info }}"
-        kit_packages: "{{ kit_packages | default({}) }}"
-      args:
-        cacheable: yes
+    - name: Display collected info
+      debug:
+        msg: "{{ zammad_info }}"
 
 - name: Generate Centralized Reports
   hosts: localhost
@@ -228,8 +216,8 @@
         content: >-
           {{
             dict(
-              groups['zammad_servers'] | zip(
-                groups['zammad_servers'] | map('extract', hostvars, 'zammad_info') | list
+              groups['zammad_servers'] | select('in', hostvars) | list | zip(
+                groups['zammad_servers'] | select('in', hostvars) | map('extract', hostvars, 'zammad_info') | select('defined') | list
               ) | list
             ) | to_nice_json
           }}
@@ -246,7 +234,9 @@
         csv_rows: |
           {% for host in groups['zammad_servers'] %}
           {% set info = hostvars[host].zammad_info | default({}) %}
+          {% if info %}
           {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
+          {% endif %}
           {% endfor %}
 
     
@@ -314,28 +304,11 @@
           }}
         dest: "/runner/artifacts/zammad_inventory_full.json"
 
-    - name: Display summary
-      debug:
-        msg: |
-          ========================================
-          Zammad Inventory Collection Complete
-          ========================================
-          Report Locations:
-            - JSON: /runner/artifacts/zammad_inventory_full.json
-            - CSV:  /runner/artifacts/zammad_inventory_report.csv
-            - MD:   /runner/artifacts/zammad_inventory_report.md
-          
-          Total Hosts: {{ groups['zammad_servers'] | length }}
-          Timestamp: {{ now(utc=True).isoformat() }}
-          ========================================
-
-
     - name: DEBUG - Check if facts are cached
       debug:
         msg: "Host {{ item }} has zammad_info: {{ hostvars[item].zammad_info is defined }}"
       loop: "{{ groups['zammad_servers'] }}"
-
-
+    
     - name: Push collected facts to AWX inventory
       block:
         - name: Get AWX credentials from environment
@@ -360,39 +333,27 @@
           loop: "{{ groups['zammad_servers'] }}"
           when: awx_url is defined
           ignore_errors: yes
-
-        - name: Build variables as YAML
-          set_fact:
-            awx_vars: >
-              {{ {
-                  'zammad_info': hostvars[item].zammad_info | default({}),
-                  'redis_info': hostvars[item].redis_info | default({}),
-                  'elasticsearch_info': hostvars[item].elasticsearch_info | default({}),
-                  'kit_packages': hostvars[item].kit_packages | default({}),
-                  'hostname': hostvars[item].hostname | default(''),
-                  'ip_address': hostvars[item].ip_address | default(''),
-                  'os': hostvars[item].os | default(''),
-                  'os_family': hostvars[item].os_family | default('')
-              } | to_nice_yaml(indent=2) }}
-          loop: "{{ groups['zammad_servers'] }}"
-          loop_control:
-            loop_var: item
-          register: yaml_vars
         
         - name: Update host variables in AWX
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/{{ host_lookup.results[idx].json.results[0].id }}/"
+            url: "{{ awx_url }}/api/v2/hosts/{{ item.json.results[0].id }}/"
             method: PATCH
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
             body_format: json
             body:
-              variables: "{{ yaml_vars.results[idx].ansible_facts.awx_vars }}"
+              variables: |
+                ---
+                zammad_info: {{ hostvars[item.json.results[0].name].zammad_info | default({}) | to_json }}
+                redis_info: {{ hostvars[item.json.results[0].name].redis_info | default({}) | to_json }}
+                elasticsearch_info: {{ hostvars[item.json.results[0].name].elasticsearch_info | default({}) | to_json }}
+                kit_packages: {{ hostvars[item.json.results[0].name].kit_packages | default({}) | to_json }}
             validate_certs: no
             force_basic_auth: yes
           loop: "{{ host_lookup.results }}"
-          loop_control:
-            index_var: idx
+          when: 
+            - awx_url is defined
+            - item.json.results | length > 0
           ignore_errors: yes
       ignore_errors: yes
 
