@@ -109,6 +109,10 @@
         hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
       ignore_errors: yes
 
+    - name: Convert to list if dict
+      set_fact:
+        hosts_data: "{{ hosts_data if hosts_data is iterable and hosts_data is not string and hosts_data is not mapping else ([hosts_data] if hosts_data else []) }}"
+
     - name: Show queried hosts
       debug:
         msg: "Found {{ hosts_data | length }} hosts from AWX"
@@ -117,7 +121,9 @@
       debug:
         msg: "- {{ item.name }}"
       loop: "{{ hosts_data }}"
-      when: hosts_data | length > 0
+      when: 
+        - hosts_data | length > 0
+        - item.name is defined
 
     - name: Push host data to Grafana as annotations
       uri:
