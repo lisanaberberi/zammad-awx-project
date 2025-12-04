@@ -50,7 +50,7 @@
       changed_when: false
     
     - name: Get Redis version
-      shell: redis-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+      shell: redis-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo ""
       register: redis_version
       ignore_errors: yes
       changed_when: false
@@ -68,14 +68,14 @@
       changed_when: false
     
     - name: Get Elasticsearch version from package (RedHat)
-      shell: rpm -qa | grep elasticsearch | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+      shell: rpm -qa | grep elasticsearch | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo ""
       register: elasticsearch_rpm_version
       ignore_errors: yes
       changed_when: false
       when: ansible_os_family == "RedHat"
     
     - name: Get Elasticsearch version from package (Debian)
-      shell: dpkg -l | grep elasticsearch | awk '{print $3}' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1
+      shell: dpkg -l | grep elasticsearch | awk '{print $3}' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo ""
       register: elasticsearch_deb_version
       ignore_errors: yes
       changed_when: false
@@ -119,9 +119,9 @@
         elasticsearch_version: >-
           {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined %}
           {{ elasticsearch_api.json.version.number }}
-          {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout %}
+          {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout is defined and elasticsearch_rpm_version.stdout | length > 0 %}
           {{ elasticsearch_rpm_version.stdout }}
-          {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout %}
+          {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout is defined and elasticsearch_deb_version.stdout | length > 0 %}
           {{ elasticsearch_deb_version.stdout }}
           {% else %}
           -
