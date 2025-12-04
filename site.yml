@@ -184,6 +184,18 @@
     - name: Display collected info
       debug:
         msg: "{{ zammad_info }}"
+    
+    - name: Set all facts as cacheable facts
+      set_fact:
+        zammad_info: "{{ zammad_info }}"
+        zammad_version: "{{ zammad_version }}"
+        redis_version: "{{ redis_version }}"
+        elasticsearch_version: "{{ elasticsearch_version }}"
+        kit_packages: "{{ kit_packages | default({}) }}"
+        zammad_service_status: "{{ zammad_service_status.stdout | default('unknown') }}"
+        zammad_service_enabled: "{{ zammad_service_enabled.stdout | default('unknown') }}"
+      args:
+        cacheable: yes
 
 - name: Generate Centralized Reports
   hosts: localhost
@@ -197,12 +209,6 @@
         path: "/runner/artifacts/"
         state: directory
         mode: '0755'
-    # - name: Create reports directory
-    #   file:
-    #     path: "/runner/artifacts/"
-    #     state: directory
-    #     mode: '0755'
-    #   delegate_to: localhost
     
     - name: Generate JSON report
       copy:
@@ -311,19 +317,41 @@
           ========================================
 
 
-    - name: Set statistics for AWX dashboard
-      set_stats:
-        data:
-          zammad_hosts_count: "{{ groups['zammad_servers'] | length }}"
-          zammad_versions: |
-            {% set versions = {} %}
-            {% for host in groups['zammad_servers'] %}
-            {% set version = hostvars[host].zammad_info.zammad_version | default('unknown') %}
-            {% if version in versions %}
-              {% set _ = versions.update({version: versions[version] + 1}) %}
-            {% else %}
-              {% set _ = versions.update({version: 1}) %}
-            {% endif %}
-            {% endfor %}
-            {{ versions }}
-          redis_installed_count: "{{ groups['zammad_servers'] | selectattr('hostvars.zammad_info.redis_version', 'defined') | list | length }}"
+    - name: Update host variables in AWX inventory
+      block:
+        - name: Get AWX token
+          set_fact:
+            awx_token: "{{ lookup('env', 'TOWER_OAUTH_TOKEN') | default(lookup('env', 'ANSIBLE_TOWER_OAUTH_TOKEN')) }}"
+        
+        - name: Update each host with collected facts
+          uri:
+            url: "{{ awx_host }}/api/v2/hosts/?name={{ item }}"
+            method: GET
+            headers:
+              Authorization: "Bearer {{ awx_token }}"
+            validate_certs: no
+          register: host_lookup
+          loop: "{{ groups['zammad_servers'] }}"
+          when: awx_token
+          ignore_errors: yes
+        
+        - name: Patch host with zammad facts
+          uri:
+            url: "{{ awx_host }}/api/v2/hosts/{{ host_lookup.results[idx].json.results[0].id }}/variables/"
+            method: PATCH
+            headers:
+              Authorization: "Bearer {{ awx_token }}"
+            body_format: json
+            body:
+              zammad_info: "{{ hostvars[item].zammad_info | default({}) }}"
+            validate_certs: no
+          loop: "{{ groups['zammad_servers'] }}"
+          loop_control:
+            index_var: idx
+          when: awx_token and host_lookup.results[idx].json.results | length > 0
+          ignore_errors: yes
+      vars:
+        awx_host: "{{ lookup('env', 'TOWER_HOST') | default('https://localhost') }}"
+      ignore_errors: yes
+    
+    - name: Set statistics for
