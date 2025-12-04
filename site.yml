@@ -103,12 +103,12 @@
     - name: Compute Zammad version
       set_fact:
         zammad_version: >-
-          {% if zammad_installed.stat.exists and zammad_version_file is defined and zammad_version_file.content is defined %}
+          {% if zammad_installed.stat.exists and (zammad_version_file is defined and zammad_version_file.content is defined) %}
             {{ zammad_version_file.content | b64decode | trim }}
-          {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout | length > 0 %}
-            {{ zammad_rpm_version.stdout }}
-          {% elif zammad_deb_version is defined and zammad_deb_version.stdout | length > 0 %}
-            {{ zammad_deb_version.stdout }}
+          {% elif (zammad_rpm_version.stdout | default('')) | length > 0 %}
+            {{ zammad_rpm_version.stdout | default('') }}
+          {% elif (zammad_deb_version.stdout | default('')) | length > 0 %}
+            {{ zammad_deb_version.stdout | default('') }}
           {% else %}
             NO_ZAMMAD
           {% endif %}
@@ -349,10 +349,10 @@
         body:
           variables: |
             ---
-            zammad_info: {{ hostvars[host_name].zammad_info | to_json }}
-            redis_info: {{ hostvars[host_name].redis_info | to_json }}
-            elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | to_json }}
-            kit_packages: {{ hostvars[host_name].kit_packages | to_json }}
+            zammad_info: {{ hostvars[host_name].zammad_info | default({}) | to_json }}
+            redis_info: {{ hostvars[host_name].redis_info | default({}) | to_json }}
+            elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | default({})  | to_json }}
+            kit_packages: {{ hostvars[host_name].kit_packages | default({}) | to_json }}
       when:
         - awx_url is defined
         - awx_host_map[host_name] is defined
