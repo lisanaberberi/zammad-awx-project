@@ -335,7 +335,7 @@
         msg: "Host {{ item }} has zammad_info: {{ hostvars[item].zammad_info is defined }}"
       loop: "{{ groups['zammad_servers'] }}"
 
-      
+
     - name: Push collected facts to AWX inventory
       block:
         - name: Get AWX credentials from environment
@@ -363,22 +363,23 @@
         
         - name: Update host variables in AWX
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/{{ item.json.results[0].id }}/variables/"
-            method: PUT
+            url: "{{ awx_url }}/api/v2/hosts/{{ item.json.results[0].id }}/"
+            method: PATCH
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
             body_format: json
             body:
-              zammad_info: "{{ hostvars[groups['zammad_servers'][idx]].zammad_info | default({}) }}"
-              redis_info: "{{ hostvars[groups['zammad_servers'][idx]].redis_info | default({}) }}"
-              elasticsearch_info: "{{ hostvars[groups['zammad_servers'][idx]].elasticsearch_info | default({}) }}"
-              kit_packages: "{{ hostvars[groups['zammad_servers'][idx]].kit_packages | default({}) }}"
+              variables: |
+                zammad_info: {{ hostvars[groups['zammad_servers'][idx]].zammad_info | to_nice_yaml(indent=2) }}
+                redis_info: {{ hostvars[groups['zammad_servers'][idx]].redis_info | to_nice_yaml(indent=2) }}
+                elasticsearch_info: {{ hostvars[groups['zammad_servers'][idx]].elasticsearch_info | to_nice_yaml(indent=2) }}
+                kit_packages: {{ hostvars[groups['zammad_servers'][idx]].kit_packages | to_nice_yaml(indent=2) }}
             validate_certs: no
             force_basic_auth: yes
           loop: "{{ host_lookup.results }}"
           loop_control:
             index_var: idx
-          when: 
+          when:
             - awx_url is defined
             - item.json.results | length > 0
           ignore_errors: yes
