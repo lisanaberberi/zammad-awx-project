@@ -25,17 +25,26 @@
         fail_msg: "Missing required environment variables"
 
   tasks:
-    - name: Get PostgreSQL password from Kubernetes secret
+    - name: Get PostgreSQL credentials from Kubernetes secret
       shell: |
-        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data.DATABASE_PASSWORD}' | base64 -d
-      register: k8s_password_result
+        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data}' | jq -r 'to_entries | map("\(.key)=\(.value | @base64d)") | .[]'
+      register: k8s_creds_result
       ignore_errors: yes
       changed_when: false
 
-    - name: Set postgres_password from Kubernetes secret
+    - name: Parse Kubernetes credentials
       set_fact:
-        postgres_password: "{{ k8s_password_result.stdout }}"
-      when: k8s_password_result.rc == 0
+        k8s_creds: "{{ (k8s_creds_result.stdout_lines | map('split', '=') | list | map('list2dict', [0, 1]) | combine) | default({}) }}"
+      ignore_errors: yes
+
+    - name: Set postgres credentials from Kubernetes
+      set_fact:
+        postgres_host: "{{ k8s_creds.get('host', postgres_host) }}"
+        postgres_port: "{{ k8s_creds.get('port', postgres_port) }}"
+        postgres_db: "{{ k8s_creds.get('database', postgres_db) }}"
+        postgres_user: "{{ k8s_creds.get('username', postgres_user) }}"
+        postgres_password: "{{ k8s_creds.get('password', postgres_password) }}"
+      when: k8s_creds_result.rc == 0
 
     - name: Debug - Show connection details
       debug:
@@ -45,6 +54,7 @@
           DB: {{ postgres_db }}
           User: {{ postgres_user }}
           Password length: {{ postgres_password | length }} chars
+      when: postgres_password is defined
       pip:
         name:
           - psycopg2-binary
