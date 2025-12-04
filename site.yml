@@ -1,4 +1,7 @@
 ---
+# ======================================
+# Play 1: Collect Zammad Instance Information
+# ======================================
 - name: Collect Zammad Instance Information
   hosts: zammad_servers
   gather_facts: yes
@@ -41,7 +44,7 @@
       register: zammad_service_enabled
       ignore_errors: yes
       changed_when: false
-    
+
     # Redis version collection
     - name: Check if Redis is installed
       shell: command -v redis-cli >/dev/null 2>&1 && echo "installed" || echo "not_installed"
@@ -55,7 +58,7 @@
       ignore_errors: yes
       changed_when: false
       when: redis_check.stdout == "installed"
-    
+
     # Elasticsearch version collection
     - name: Check if Elasticsearch is running
       uri:
@@ -80,8 +83,8 @@
       ignore_errors: yes
       changed_when: false
       when: ansible_os_family == "Debian"
-    
-    # Get Zammad packages (KIT packages and others)
+
+    # Zammad packages
     - name: Get installed Zammad packages
       shell: |
         zammad run rails r 'Package.all.each { |p| puts "#{p.name}||#{p.version}||#{p.vendor}" }'
@@ -89,27 +92,27 @@
       ignore_errors: yes
       changed_when: false
       when: zammad_installed.stat.exists
-    
+
     - name: Ensure fact cache directory exists
       file:
         path: /tmp/awx_fact_cache
         state: directory
         mode: '0777'
 
+    # Compute Zammad version
     - name: Compute Zammad version
       set_fact:
         zammad_version: >-
           {% if zammad_installed.stat.exists and zammad_version_file is defined and zammad_version_file.content is defined %}
-          {{ zammad_version_file.content | b64decode | trim }}
-          {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout is defined and zammad_rpm_version.stdout | length > 0 %}
-          {{ zammad_rpm_version.stdout }}
-          {% elif zammad_deb_version is defined and zammad_deb_version.stdout is defined and zammad_deb_version.stdout | length > 0 %}
-          {{ zammad_deb_version.stdout }}
+            {{ zammad_version_file.content | b64decode | trim }}
+          {% elif zammad_rpm_version is defined and zammad_rpm_version.stdout | length > 0 %}
+            {{ zammad_rpm_version.stdout }}
+          {% elif zammad_deb_version is defined and zammad_deb_version.stdout | length > 0 %}
+            {{ zammad_deb_version.stdout }}
           {% else %}
-          NO_ZAMMAD
+            NO_ZAMMAD
           {% endif %}
 
-    
     - name: Set Redis version fact
       set_fact:
         redis_version: "{{ redis_version.stdout | default('-') }}"
@@ -117,14 +120,14 @@
     - name: Compute Elasticsearch version
       set_fact:
         elasticsearch_version: >-
-          {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined %}
-          {{ elasticsearch_api.json.version.number }}
-          {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout is defined and elasticsearch_rpm_version.stdout | length > 0 %}
-          {{ elasticsearch_rpm_version.stdout }}
-          {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout is defined and elasticsearch_deb_version.stdout | length > 0 %}
-          {{ elasticsearch_deb_version.stdout }}
+          {% if elasticsearch_api.json.version is defined %}
+            {{ elasticsearch_api.json.version.number }}
+          {% elif elasticsearch_rpm_version.stdout | length > 0 %}
+            {{ elasticsearch_rpm_version.stdout }}
+          {% elif elasticsearch_deb_version.stdout | length > 0 %}
+            {{ elasticsearch_deb_version.stdout }}
           {% else %}
-          -
+            -
           {% endif %}
     
     - name: Parse KIT packages
@@ -133,7 +136,7 @@
           {% set packages = {} %}
           {% set known_kit = ['KIT-Customizations', 'KIT-Filter', 'KIT-Form', 'KIT-Mobile', 'KIT-Newsletter', 'KIT-Trigger'] %}
           {% set other_pkgs = [] %}
-          {% if zammad_packages is defined and zammad_packages.stdout_lines is defined %}
+          {% if zammad_packages.stdout_lines is defined %}
             {% for line in zammad_packages.stdout_lines %}
               {% set parts = line.split('||') %}
               {% if parts | length == 3 %}
@@ -156,7 +159,6 @@
           {% set _ = packages.update({'other_packages': other_pkgs | join('; ')}) %}
           {{ packages }}
       when: zammad_version != 'NO_ZAMMAD'
- 
     
     - name: Create Zammad info dict
       set_fact:
@@ -198,6 +200,10 @@
       debug:
         msg: "{{ zammad_info }}"
 
+
+# ======================================
+# Play 2: Generate Centralized Reports
+# ======================================
 - name: Generate Centralized Reports
   hosts: localhost
   gather_facts: no
@@ -210,7 +216,8 @@
         path: "/runner/artifacts/"
         state: directory
         mode: '0755'
-    
+
+    # JSON report
     - name: Generate JSON report
       copy:
         content: >-
@@ -224,7 +231,7 @@
         dest: "/runner/artifacts/zammad_inventory_full.json"
       changed_when: false
 
-    
+    # CSV report
     - name: Generate CSV header
       set_fact:
         csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
@@ -239,7 +246,6 @@
           {% endif %}
           {% endfor %}
 
-    
     - name: Generate CSV report
       copy:
         content: |
@@ -247,22 +253,19 @@
           {{ csv_rows }}
         dest: "/runner/artifacts/zammad_inventory_report.csv"
       changed_when: false
-    
+
+    # Markdown report
     - name: Generate formatted Markdown report
       copy:
         dest: /runner/artifacts/zammad_inventory_report.md
         content: |
           # Zammad Infrastructure Inventory Report
-
           **Generated:** {{ now(utc=True).isoformat() }}
           **Total Hosts:** {{ groups['zammad_servers'] | length }}
-
           ---
-
           {% for host in groups['zammad_servers'] | sort %}
           {% set info = hostvars[host].zammad_info | default({}) %}
           ## {{ info.hostname | default(host) }}
-
           - **IP Address:** {{ info.ip_address | default('Unknown') }}
           - **Owner:** {{ info.owner | default('Unknown') }}
           - **State:** {{ info.state | default('Unknown') }}
@@ -273,7 +276,6 @@
           - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
           - **Service Active:** {{ 'Yes' if info.zammad_active | default(false) else 'No' }}
           - **Service Enabled:** {{ 'Yes' if info.zammad_enabled | default(false) else 'No' }}
-
           ### KIT Packages
           {% set kp = info.kit_packages | default({}) %}
           - **KIT-Customizations:** {{ kp['KIT-Customizations'] | default('-') }}
@@ -282,129 +284,76 @@
           - **KIT-Mobile:** {{ kp['KIT-Mobile'] | default('-') }}
           - **KIT-Newsletter:** {{ kp['KIT-Newsletter'] | default('-') }}
           - **KIT-Trigger:** {{ kp['KIT-Trigger'] | default('-') }}
-
           ### Other Packages
           {{ kp.other_packages | default('None') }}
-
           ---
           {% endfor %}
-      changed_when: false
 
-    - name: Save all host facts to JSON
-      copy:
-        content: >-
+
+# ======================================
+# Play 3: Push Facts to AWX Inventory
+# ======================================
+- name: Push collected facts to AWX inventory
+  hosts: localhost
+  gather_facts: no
+  connection: local
+  become: no
+
+  tasks:
+    - name: Get AWX credentials from environment
+      set_fact:
+        awx_url: "{{ lookup('env', 'TOWER_HOST') }}"
+        awx_user: "{{ lookup('env', 'TOWER_USERNAME') }}"
+        awx_pass: "{{ lookup('env', 'TOWER_PASSWORD') }}"
+      when: 
+        - lookup('env', 'TOWER_HOST') | length > 0
+        - lookup('env', 'TOWER_USERNAME') | length > 0
+        - lookup('env', 'TOWER_PASSWORD') | length > 0
+
+    - name: Lookup all hosts in this inventory
+      uri:
+        url: "{{ awx_url }}/api/v2/inventories/{{ tower_inventory_id }}/hosts/?page_size=200"
+        method: GET
+        user: "{{ awx_user }}"
+        password: "{{ awx_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        status_code: 200
+      register: awx_hosts
+      when: awx_url is defined
+
+    - name: Build AWX host mapping
+      set_fact:
+        awx_host_map: >-
           {{
             dict(
-              groups['zammad_servers'] |
-              map('extract', hostvars, 'zammad_info') |
-              zip(groups['zammad_servers']) |
-              map('reverse') |
-              list
-            ) | to_nice_json
+              awx_hosts.json.results
+              | map(attribute='name')
+              | zip(awx_hosts.json.results | map(attribute='id'))
+            )
           }}
-        dest: "/runner/artifacts/zammad_inventory_full.json"
+      when: awx_hosts is defined and awx_hosts.json.results | length > 0
 
-    - name: DEBUG - Check if facts are cached
-      debug:
-        msg: "Host {{ item }} has zammad_info: {{ hostvars[item].zammad_info is defined }}"
+    - name: Update host variables in AWX for all zammad_servers
       loop: "{{ groups['zammad_servers'] }}"
-    
-    - name: Push collected facts to AWX inventory
-      hosts: localhost
-      gather_facts: no
-      connection: local
-      become: no
-
-      tasks:
-        - name: Get AWX credentials from environment
-          set_fact:
-            awx_url: "{{ lookup('env', 'TOWER_HOST') }}"
-            awx_user: "{{ lookup('env', 'TOWER_USERNAME') }}"
-            awx_pass: "{{ lookup('env', 'TOWER_PASSWORD') }}"
-          when: 
-            - lookup('env', 'TOWER_HOST') | length > 0
-            - lookup('env', 'TOWER_USERNAME') | length > 0
-            - lookup('env', 'TOWER_PASSWORD') | length > 0
-
-        - name: Lookup all hosts in this inventory
-          uri:
-            url: "{{ awx_url }}/api/v2/inventories/{{ tower_inventory_id }}/hosts/?page_size=200"
-            method: GET
-            user: "{{ awx_user }}"
-            password: "{{ awx_pass }}"
-            force_basic_auth: yes
-            validate_certs: no
-            status_code: 200
-          register: awx_hosts
-          when: awx_url is defined
-
-        - name: Build AWX host mapping
-          set_fact:
-            awx_host_map: >-
-              {{
-                dict(
-                  awx_hosts.json.results
-                  | map(attribute='name')
-                  | zip(awx_hosts.json.results | map(attribute='id'))
-                )
-              }}
-          when: awx_hosts is defined and awx_hosts.json.results | length > 0
-
-        - name: Update host variables in AWX for all zammad_servers
-          loop: "{{ groups['zammad_servers'] }}"
-          loop_control:
-            loop_var: host_name
-          uri:
-            url: "{{ awx_url }}/api/v2/hosts/{{ awx_host_map[host_name] }}/"
-            method: PATCH
-            user: "{{ awx_user }}"
-            password: "{{ awx_pass }}"
-            force_basic_auth: yes
-            validate_certs: no
-            body_format: json
-            body:
-              variables: |
-                ---
-                zammad_info: {{ hostvars[host_name].zammad_info | to_json }}
-                redis_info: {{ hostvars[host_name].redis_info | to_json }}
-                elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | to_json }}
-                kit_packages: {{ hostvars[host_name].kit_packages | to_json }}
-          when:
-            - awx_url is defined
-            - awx_host_map[host_name] is defined
-          ignore_errors: yes
+      loop_control:
+        loop_var: host_name
+      uri:
+        url: "{{ awx_url }}/api/v2/hosts/{{ awx_host_map[host_name] }}/"
+        method: PATCH
+        user: "{{ awx_user }}"
+        password: "{{ awx_pass }}"
+        force_basic_auth: yes
+        validate_certs: no
+        body_format: json
+        body:
+          variables: |
+            ---
+            zammad_info: {{ hostvars[host_name].zammad_info | to_json }}
+            redis_info: {{ hostvars[host_name].redis_info | to_json }}
+            elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | to_json }}
+            kit_packages: {{ hostvars[host_name].kit_packages | to_json }}
+      when:
+        - awx_url is defined
+        - awx_host_map[host_name] is defined
       ignore_errors: yes
-
-    - name: Display summary
-      debug:
-        msg: |
-          ========================================
-          Zammad Inventory Collection Complete
-          ========================================
-          Report Locations:
-            - JSON: /runner/artifacts/zammad_inventory_full.json
-            - CSV:  /runner/artifacts/zammad_inventory_report.csv
-            - MD:   /runner/artifacts/zammad_inventory_report.md
-          
-          Total Hosts: {{ groups['zammad_servers'] | length }}
-          Timestamp: {{ now(utc=True).isoformat() }}
-          ========================================
-
-    - name: Set statistics for AWX dashboard
-      set_stats:
-        data:
-          zammad_hosts_count: "{{ groups['zammad_servers'] | length }}"
-          zammad_versions: |
-            {% set versions = {} %}
-            {% for host in groups['zammad_servers'] %}
-            {% set version = hostvars[host].zammad_info.zammad_version | default('unknown') %}
-            {% if version in versions %}
-              {% set _ = versions.update({version: versions[version] + 1}) %}
-            {% else %}
-              {% set _ = versions.update({version: 1}) %}
-            {% endif %}
-            {% endfor %}
-            {{ versions }}
-          redis_installed_count: "{{ groups['zammad_servers'] | selectattr('hostvars.zammad_info.redis_version', 'defined') | list | length }}"
-        per_host: no
-        aggregate: yes
