@@ -321,39 +321,43 @@
             - lookup('env', 'TOWER_USERNAME') | length > 0
             - lookup('env', 'TOWER_PASSWORD') | length > 0
         
-        - name: Get host ID from AWX API
+        # -----------------------------------------------
+        # Step 1: Get host object in *this* inventory only
+        # -----------------------------------------------
+        - name: Lookup host in AWX for this inventory and hostname
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/?name={{ item }}" 
+            url: "{{ awx_url }}/api/v2/hosts/?name={{ inventory_hostname }}&inventory={{ tower_inventory_id }}"
             method: GET
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
-            validate_certs: no
             force_basic_auth: yes
-          register: host_lookup
-          loop: "{{ groups['zammad_servers'] }}"
+            validate_certs: no
+            status_code: 200
+          register: awx_lookup
           when: awx_url is defined
-          ignore_errors: yes
-        
-        - name: Update host variables in AWX
+
+        # -----------------------------------------------
+        # Step 2: Update only the matching host object
+        # -----------------------------------------------
+        - name: Update variables for this host in this inventory
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/{{ item.json.results[0].id }}/"
+            url: "{{ awx_url }}/api/v2/hosts/{{ awx_lookup.json.results[0].id }}/"
             method: PATCH
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
+            force_basic_auth: yes
+            validate_certs: no
             body_format: json
             body:
               variables: |
                 ---
-                zammad_info: {{ hostvars[item.json.results[0].name].zammad_info | default({}) | to_json }}
-                redis_info: {{ hostvars[item.json.results[0].name].redis_info | default({}) | to_json }}
-                elasticsearch_info: {{ hostvars[item.json.results[0].name].elasticsearch_info | default({}) | to_json }}
-                kit_packages: {{ hostvars[item.json.results[0].name].kit_packages | default({}) | to_json }}
-            validate_certs: no
-            force_basic_auth: yes
-          loop: "{{ host_lookup.results }}"
-          when: 
+                zammad_info: {{ zammad_info | to_json }}
+                redis_info: {{ redis_info | to_json }}
+                elasticsearch_info: {{ elasticsearch_info | to_json }}
+                kit_packages: {{ kit_packages | to_json }}
+          when:
             - awx_url is defined
-            - item.json.results | length > 0
+            - awx_lookup.json.count | default(0) > 0
           ignore_errors: yes
       ignore_errors: yes
 
