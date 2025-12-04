@@ -334,56 +334,86 @@
       debug:
         msg: "Host {{ item }} has zammad_info: {{ hostvars[item].zammad_info is defined }}"
       loop: "{{ groups['zammad_servers'] }}"
-    
-    - name: Get host ID from AWX API
-      uri:
-        url: "{{ awx_url }}/api/v2/hosts/?name={{ item }}"
-        method: GET
-        user: "{{ awx_user }}"
-        password: "{{ awx_pass }}"
-        validate_certs: no
-        force_basic_auth: yes
-      register: host_lookup
-      loop: "{{ groups['zammad_servers'] }}"
-      when: awx_url is defined
-      ignore_errors: yes
-    
-    - name: Update host variables in AWX
-      uri:
-        url: "{{ awx_url }}/api/v2/hosts/{{ item.json.results[0].id }}/variables/"
-        method: PUT
-        user: "{{ awx_user }}"
-        password: "{{ awx_pass }}"
-        body_format: json
-        body:
-          zammad_info: "{{ hostvars[groups['zammad_servers'][idx]].zammad_info | default({}) }}"
-          redis_info: "{{ hostvars[groups['zammad_servers'][idx]].redis_info | default({}) }}"
-          elasticsearch_info: "{{ hostvars[groups['zammad_servers'][idx]].elasticsearch_info | default({}) }}"
-          kit_packages: "{{ hostvars[groups['zammad_servers'][idx]].kit_packages | default({}) }}"
-        validate_certs: no
-        force_basic_auth: yes
-      loop: "{{ host_lookup.results }}"
-      loop_control:
-        index_var: idx
-      when: 
-        - awx_url is defined
-        - item.json.results | length > 0
-      ignore_errors: yes
-  ignore_errors: yes
+
+      
+    - name: Push collected facts to AWX inventory
+      block:
+        - name: Get AWX credentials from environment
+          set_fact:
+            awx_url: "{{ lookup('env', 'TOWER_HOST') }}"
+            awx_user: "{{ lookup('env', 'TOWER_USERNAME') }}"
+            awx_pass: "{{ lookup('env', 'TOWER_PASSWORD') }}"
+          when: 
+            - lookup('env', 'TOWER_HOST') | length > 0
+            - lookup('env', 'TOWER_USERNAME') | length > 0
+            - lookup('env', 'TOWER_PASSWORD') | length > 0
         
-- name: Set statistics for AWX dashboard
-  set_stats:
-    data:
-      zammad_hosts_count: "{{ groups['zammad_servers'] | length }}"
-      zammad_versions: |
-        {% set versions = {} %}
-        {% for host in groups['zammad_servers'] %}
-        {% set version = hostvars[host].zammad_info.zammad_version | default('unknown') %}
-        {% if version in versions %}
-          {% set _ = versions.update({version: versions[version] + 1}) %}
-        {% else %}
-          {% set _ = versions.update({version: 1}) %}
-        {% endif %}
-        {% endfor %}
-        {{ versions }}
-      redis_installed_count: "{{ groups['zammad_servers'] | selectattr('hostvars.zammad_info.redis_version', 'defined') | list | length }}"
+        - name: Get host ID from AWX API
+          uri:
+            url: "{{ awx_url }}/api/v2/hosts/?name={{ item }}"
+            method: GET
+            user: "{{ awx_user }}"
+            password: "{{ awx_pass }}"
+            validate_certs: no
+            force_basic_auth: yes
+          register: host_lookup
+          loop: "{{ groups['zammad_servers'] }}"
+          when: awx_url is defined
+          ignore_errors: yes
+        
+        - name: Update host variables in AWX
+          uri:
+            url: "{{ awx_url }}/api/v2/hosts/{{ item.json.results[0].id }}/variables/"
+            method: PUT
+            user: "{{ awx_user }}"
+            password: "{{ awx_pass }}"
+            body_format: json
+            body:
+              zammad_info: "{{ hostvars[groups['zammad_servers'][idx]].zammad_info | default({}) }}"
+              redis_info: "{{ hostvars[groups['zammad_servers'][idx]].redis_info | default({}) }}"
+              elasticsearch_info: "{{ hostvars[groups['zammad_servers'][idx]].elasticsearch_info | default({}) }}"
+              kit_packages: "{{ hostvars[groups['zammad_servers'][idx]].kit_packages | default({}) }}"
+            validate_certs: no
+            force_basic_auth: yes
+          loop: "{{ host_lookup.results }}"
+          loop_control:
+            index_var: idx
+          when: 
+            - awx_url is defined
+            - item.json.results | length > 0
+          ignore_errors: yes
+      ignore_errors: yes
+
+    - name: Display summary
+      debug:
+        msg: |
+          ========================================
+          Zammad Inventory Collection Complete
+          ========================================
+          Report Locations:
+            - JSON: /runner/artifacts/zammad_inventory_full.json
+            - CSV:  /runner/artifacts/zammad_inventory_report.csv
+            - MD:   /runner/artifacts/zammad_inventory_report.md
+          
+          Total Hosts: {{ groups['zammad_servers'] | length }}
+          Timestamp: {{ now(utc=True).isoformat() }}
+          ========================================
+
+    - name: Set statistics for AWX dashboard
+      set_stats:
+        data:
+          zammad_hosts_count: "{{ groups['zammad_servers'] | length }}"
+          zammad_versions: |
+            {% set versions = {} %}
+            {% for host in groups['zammad_servers'] %}
+            {% set version = hostvars[host].zammad_info.zammad_version | default('unknown') %}
+            {% if version in versions %}
+              {% set _ = versions.update({version: versions[version] + 1}) %}
+            {% else %}
+              {% set _ = versions.update({version: 1}) %}
+            {% endif %}
+            {% endfor %}
+            {{ versions }}
+          redis_installed_count: "{{ groups['zammad_servers'] | selectattr('hostvars.zammad_info.redis_version', 'defined') | list | length }}"
+        per_host: no
+        aggregate: yes
