@@ -5,13 +5,10 @@
   connection: local
   become: no
 
-  collections:
-    - community.postgresql
-
   vars:
     postgres_host: "{{ lookup('env', 'AWX_POSTGRES_HOST') }}"
-    postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') | int }}"
-    postgres_db: "{{ lookup('env', 'AWX_POSTGRES_DB') }}"
+    postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') | default('5432') }}"
+    postgres_db: "{{ lookup('env', 'AWX_POSTGRES_DB') | default('awx') }}"
     postgres_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default('awx') }}"
     postgres_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') }}"
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
@@ -36,30 +33,35 @@
         state: present
       ignore_errors: yes
 
-    - name: Query AWX PostgreSQL database
-      community.postgresql.postgresql_query:
-        db: "{{ postgres_db }}"
-        port: "{{ postgres_port }}"
-        login_host: "{{ postgres_host }}"
-        login_user: "{{ postgres_user }}"
-        login_password: "{{ postgres_password }}"
-        query: |
+    - name: Query AWX PostgreSQL database using psql
+      shell: |
+        export PGPASSWORD="{{ postgres_password }}"
+        psql -h {{ postgres_host }} -U {{ postgres_user }} -d {{ postgres_db }} -t -c "
+        SELECT json_agg(row_to_json(t))
+        FROM (
           SELECT 
             h.id,
             h.name,
             h.variables
           FROM main_host h
           JOIN main_inventory i ON h.inventory_id = i.id
-          WHERE i.name = %s
+          WHERE i.name = '{{ inventory_name }}'
           ORDER BY h.name
-        named_args:
-          inventory: "{{ inventory_name }}"
+        ) t
+        "
       register: db_query_result
       ignore_errors: yes
+      changed_when: false
 
-    - name: Set hosts data
+    - name: Parse database query result
       set_fact:
-        hosts_data: "{{ db_query_result.query_result | default([]) }}"
+        hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
+      ignore_errors: yes
+
+    - name: Set empty list if query failed
+      set_fact:
+        hosts_data: []
+      when: hosts_data is not defined or hosts_data is none
 
     - name: DEBUG - Show queried hosts
       debug:
@@ -71,8 +73,8 @@
 
     - name: Show database query error if failed
       debug:
-        msg: "Database query failed: {{ db_query_result.msg | default('Unknown error') }}"
-      when: db_query_result.failed | default(false)
+        msg: "Database query output: {{ db_query_result.stdout }}"
+      when: db_query_result.rc | default(0) != 0
 
     - name: Push host data to Grafana as annotations
       uri:
