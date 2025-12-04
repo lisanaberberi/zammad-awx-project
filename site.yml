@@ -326,7 +326,7 @@
         # -----------------------------------------------
         - name: Lookup host in AWX for this inventory and hostname
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/?name={{ inventory_hostname }}&inventory={{ tower_inventory_id }}"
+            url: "{{ awx_url }}/api/v2/hosts/?name__exact={{ inventory_hostname }}&inventory={{ tower_inventory_id }}"
             method: GET
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
