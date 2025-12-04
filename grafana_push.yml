@@ -186,5 +186,5 @@
           - {{ host.name }}
           {% endfor %}
           
-          Timestamp: {{ ansible_date_time.iso8601 }}
+          Timestamp: {{ ansible_date_time.iso8601 }} 
           ========================================
