@@ -337,27 +337,25 @@
     
     - name: Push collected facts to AWX inventory
       block:
-        - name: Get inventory ID from AWX API
-          uri:
-            url: "https://{{ ansible_host | default('localhost') }}/api/v2/inventories/?name=Demo%20Inventory"
-            method: GET
-            user: "{{ lookup('env', 'TOWER_USERNAME') | default('admin') }}"
-            password: "{{ lookup('env', 'TOWER_PASSWORD') | default('admin') }}"
-            validate_certs: no
-            force_basic_auth: yes
-          register: inventory_result
-          ignore_errors: yes
+        - name: Get AWX host from environment
+          set_fact:
+            awx_url: "{{ lookup('env', 'TOWER_HOST') }}"
+            awx_user: "{{ lookup('env', 'TOWER_USERNAME') }}"
+            awx_pass: "{{ lookup('env', 'TOWER_PASSWORD') }}"
+          when: 
+            - lookup('env', 'TOWER_HOST') | length > 0
+            - lookup('env', 'TOWER_USERNAME') | length > 0
+            - lookup('env', 'TOWER_PASSWORD') | length > 0
         
-        - name: Update host facts in AWX
+        - name: Update host facts in AWX via API
           uri:
-            url: "https://{{ ansible_host | default('localhost') }}/api/v2/hosts/?name={{ item }}"
+            url: "{{ awx_url }}/api/v2/hosts/?name={{ item }}"
             method: PATCH
-            user: "{{ lookup('env', 'TOWER_USERNAME') | default('admin') }}"
-            password: "{{ lookup('env', 'TOWER_PASSWORD') | default('admin') }}"
+            user: "{{ awx_user }}"
+            password: "{{ awx_pass }}"
             body_format: json
             body:
               variables: |
-                ---
                 zammad_info: {{ hostvars[item].zammad_info | default({}) | to_json }}
                 redis_info: {{ hostvars[item].redis_info | default({}) | to_json }}
                 elasticsearch_info: {{ hostvars[item].elasticsearch_info | default({}) | to_json }}
@@ -367,7 +365,7 @@
           loop: "{{ groups['zammad_servers'] }}"
           ignore_errors: yes
       ignore_errors: yes
-    
+        
     - name: Set statistics for AWX dashboard
       set_stats:
         data:
