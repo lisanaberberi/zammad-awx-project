@@ -178,7 +178,8 @@
           elasticsearch_version: "{{ elasticsearch_version }}"
           kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
-      cacheable: yes
+      args:
+        cacheable: yes
     
     - name: Display collected info
       debug:
