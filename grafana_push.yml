@@ -13,7 +13,7 @@
     postgres_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') | default(lookup('env', 'AWX_POSTGRES_PASSWORD')) }}"
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
     grafana_url: "{{ lookup('env', 'GRAFANA_URL') }}"
-    grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') | default(lookup('env', 'ANSIBLE_GRAFANA_TOKEN')) }}"
+    grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
 
   pre_tasks:
     - name: Validate required variables
