@@ -310,7 +310,12 @@
       loop: "{{ groups['zammad_servers'] }}"
     
     - name: Push collected facts to AWX inventory
-      block:
+      hosts: localhost
+      gather_facts: no
+      connection: local
+      become: no
+
+      tasks:
         - name: Get AWX credentials from environment
           set_fact:
             awx_url: "{{ lookup('env', 'TOWER_HOST') }}"
@@ -320,28 +325,37 @@
             - lookup('env', 'TOWER_HOST') | length > 0
             - lookup('env', 'TOWER_USERNAME') | length > 0
             - lookup('env', 'TOWER_PASSWORD') | length > 0
-        
-        # -----------------------------------------------
-        # Step 1: Get host object in *this* inventory only
-        # -----------------------------------------------
-        - name: Lookup host in AWX for this inventory and hostname
+
+        - name: Lookup all hosts in this inventory
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/?name__exact={{ inventory_hostname }}&inventory={{ tower_inventory_id }}"
+            url: "{{ awx_url }}/api/v2/inventories/{{ tower_inventory_id }}/hosts/?page_size=200"
             method: GET
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
             force_basic_auth: yes
             validate_certs: no
             status_code: 200
-          register: awx_lookup
+          register: awx_hosts
           when: awx_url is defined
 
-        # -----------------------------------------------
-        # Step 2: Update only the matching host object
-        # -----------------------------------------------
-        - name: Update variables for this host in this inventory
+        - name: Build AWX host mapping
+          set_fact:
+            awx_host_map: >-
+              {{
+                dict(
+                  awx_hosts.json.results
+                  | map(attribute='name')
+                  | zip(awx_hosts.json.results | map(attribute='id'))
+                )
+              }}
+          when: awx_hosts is defined and awx_hosts.json.results | length > 0
+
+        - name: Update host variables in AWX for all zammad_servers
+          loop: "{{ groups['zammad_servers'] }}"
+          loop_control:
+            loop_var: host_name
           uri:
-            url: "{{ awx_url }}/api/v2/hosts/{{ awx_lookup.json.results[0].id }}/"
+            url: "{{ awx_url }}/api/v2/hosts/{{ awx_host_map[host_name] }}/"
             method: PATCH
             user: "{{ awx_user }}"
             password: "{{ awx_pass }}"
@@ -351,13 +365,13 @@
             body:
               variables: |
                 ---
-                zammad_info: {{ zammad_info | to_json }}
-                redis_info: {{ redis_info | to_json }}
-                elasticsearch_info: {{ elasticsearch_info | to_json }}
-                kit_packages: {{ kit_packages | to_json }}
+                zammad_info: {{ hostvars[host_name].zammad_info | to_json }}
+                redis_info: {{ hostvars[host_name].redis_info | to_json }}
+                elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | to_json }}
+                kit_packages: {{ hostvars[host_name].kit_packages | to_json }}
           when:
             - awx_url is defined
-            - awx_lookup.json.count | default(0) > 0
+            - awx_host_map[host_name] is defined
           ignore_errors: yes
       ignore_errors: yes
 
