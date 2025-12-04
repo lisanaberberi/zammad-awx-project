@@ -5,12 +5,15 @@
   connection: local
   become: no
 
+  collections:
+    - community.postgresql
+
   vars:
     postgres_host: "{{ lookup('env', 'AWX_POSTGRES_HOST') }}"
-    postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') }}"
+    postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') | int }}"
     postgres_db: "{{ lookup('env', 'AWX_POSTGRES_DB') }}"
-    postgres_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default(lookup('env', 'AWX_POSTGRES_USER') | default('awx')) }}"
-    postgres_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') | default(lookup('env', 'AWX_POSTGRES_PASSWORD')) }}"
+    postgres_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default('awx') }}"
+    postgres_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') }}"
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
     grafana_url: "{{ lookup('env', 'GRAFANA_URL') }}"
     grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
@@ -19,9 +22,9 @@
     - name: Validate required variables
       assert:
         that:
-          - postgres_host is defined
-          - grafana_url is defined
-          - grafana_token is defined
+          - postgres_host is defined and postgres_host | length > 0
+          - grafana_url is defined and grafana_url | length > 0
+          - grafana_token is defined and grafana_token | length > 0
         fail_msg: "Missing required environment variables"
 
   tasks:
@@ -34,7 +37,7 @@
       ignore_errors: yes
 
     - name: Query AWX PostgreSQL database
-      postgresql_query:
+      community.postgresql.postgresql_query:
         db: "{{ postgres_db }}"
         port: "{{ postgres_port }}"
         login_host: "{{ postgres_host }}"
@@ -66,6 +69,11 @@
           - {{ host.name }}
           {% endfor %}
 
+    - name: Show database query error if failed
+      debug:
+        msg: "Database query failed: {{ db_query_result.msg | default('Unknown error') }}"
+      when: db_query_result.failed | default(false)
+
     - name: Push host data to Grafana as annotations
       uri:
         url: "{{ grafana_url }}/api/annotations"
@@ -93,8 +101,7 @@
           time: "{{ ansible_date_time.epoch | int }}000"
         validate_certs: no
       loop: "{{ hosts_data }}"
-      when: 
-        - hosts_data | length > 0
+      when: hosts_data | length > 0
       ignore_errors: yes
 
     - name: Display summary
