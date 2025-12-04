@@ -6,14 +6,14 @@
   become: no
 
   vars:
-    postgres_host: "{{ lookup('env', 'AWX_POSTGRES_HOST') }}"
-    postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') | default('5432') }}"
-    postgres_db: "{{ lookup('env', 'AWX_POSTGRES_DB') | default('awx') }}"
-    postgres_user: "{{ lookup('env', 'ANSIBLE_NET_USERNAME') | default('awx') }}"
-    postgres_password: "{{ lookup('env', 'ANSIBLE_NET_PASSWORD') }}"
+    postgres_host: "{{ AWX_POSTGRES_HOST | default(lookup('env', 'AWX_POSTGRES_HOST')) }}"
+    postgres_port: "{{ AWX_POSTGRES_PORT | default(lookup('env', 'AWX_POSTGRES_PORT') | default('5432')) }}"
+    postgres_db: "{{ AWX_POSTGRES_DB | default(lookup('env', 'AWX_POSTGRES_DB') | default('awx')) }}"
+    postgres_user: "{{ AWX_POSTGRES_USER | default(lookup('env', 'AWX_POSTGRES_USER') | default('awx')) }}"
+    postgres_password: "{{ AWX_POSTGRES_PASSWORD | default(lookup('env', 'AWX_POSTGRES_PASSWORD')) }}"
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
-    grafana_url: "{{ lookup('env', 'GRAFANA_URL') }}"
-    grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
+    grafana_url: "{{ GRAFANA_URL | default(lookup('env', 'GRAFANA_URL')) }}"
+    grafana_token: "{{ GRAFANA_TOKEN | default(lookup('env', 'GRAFANA_TOKEN')) }}"
 
   pre_tasks:
     - name: Validate required variables
