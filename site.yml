@@ -120,15 +120,15 @@
     - name: Compute Elasticsearch version
       set_fact:
         elasticsearch_version: >-
-          {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined %}
-            {{ elasticsearch_api.json.version.number }}
-          {% elif 'elasticsearch_rpm_version' in vars() and elasticsearch_rpm_version.stdout is defined %}
-            {{ elasticsearch_rpm_version.stdout }}
-          {% elif 'elasticsearch_deb_version' in vars() and elasticsearch_deb_version.stdout is defined %}
-            {{ elasticsearch_deb_version.stdout }}
-          {% else %}
-            -
-          {% endif %}
+          {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined -%}
+          {{ elasticsearch_api.json.version.number }}
+          {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout is defined and elasticsearch_rpm_version.stdout | length > 0 -%}
+          {{ elasticsearch_rpm_version.stdout }}
+          {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout is defined and elasticsearch_deb_version.stdout | length > 0 -%}
+          {{ elasticsearch_deb_version.stdout }}
+          {% else -%}
+          -
+          {% endif -%}
     
     - name: Parse KIT packages
       set_fact:
