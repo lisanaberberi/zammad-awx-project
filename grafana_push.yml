@@ -21,7 +21,7 @@
     - name: Set Grafana variables from environment
       set_fact:
         grafana_url: "{{ GRAFANA_URL }}"
-        grafana_token: "{{ GRAFANA_TOKEN | trim}}"
+        grafana_token: "{{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','')}}"     
 
     # -----------------------------
     # 2️⃣ Validate required environment variables
