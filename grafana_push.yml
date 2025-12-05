@@ -139,8 +139,8 @@
         var: grafana_user
 
     - name: Calculate current timestamp in milliseconds
-          set_fact:
-            current_time_ms: "{{ ((lookup('pipe', 'date +%s') | int) * 1000) | int }}"
+      set_fact:
+        current_time_ms: "{{ ((lookup('pipe', 'date +%s') | int) * 1000) | int }}"
 
     - name: Test annotations with proper time format
       uri:
