@@ -138,7 +138,7 @@
             {% else %}
             No Zammad info available
             {% endif %}
-          time: "{{ ansible_date_time.epoch | int }}000"
+          time: "{{ (now() | to_datetime | to_timestamp | int) }}000"
         validate_certs: no
         status_code: [200, 204]
       loop: "{{ parsed_hosts }}"
