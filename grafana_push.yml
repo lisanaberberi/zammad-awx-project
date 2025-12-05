@@ -47,7 +47,7 @@
         login_port: "{{ AWX_POSTGRES_PORT | int }}"
         login_user: "{{ AWX_POSTGRES_USER }}"
         login_password: "{{ AWX_POSTGRES_PASSWORD | trim }}"
-        database: "{{ AWX_POSTGRES_DB }}"   # use 'database' (db is deprecated)
+        login_db: "{{ AWX_POSTGRES_DB }}"   # <-- use login_db (or 'db' as legacy alias)
         query: |
           SELECT h.id, h.name, h.variables
           FROM main_host h
