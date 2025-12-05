@@ -10,7 +10,6 @@
     postgres_port: "{{ AWX_POSTGRES_PORT | default('5432') }}"
     postgres_db: "{{ AWX_POSTGRES_DB | default('awx') }}"
     postgres_user: "{{ AWX_POSTGRES_USER | default('awx') }}"
-    postgres_password: ""
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
     grafana_url: "{{ GRAFANA_URL | default('') }}"
     grafana_token: "{{ GRAFANA_TOKEN | default('') }}"
@@ -25,25 +24,10 @@
 
     - name: Get PostgreSQL credentials from Kubernetes secret
       shell: |
-        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data.password}' | jq .
-      register: k8s_password_result
+        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data}' | jq -r 'to_entries[] | "\(.key)=\(.value | @base64d)"' > /tmp/pg_creds.conf
       ignore_errors: yes
       changed_when: false
-
-    - name: Set password from Kubernetes secret
-      set_fact:
-        postgres_password: "{{ k8s_password_result.stdout }}"
-      when: k8s_password_result.rc == 0
-
-    - name: Show connection details
-      debug:
-        msg: |
-          Connecting to PostgreSQL:
-          Host: {{ postgres_host }}
-          Port: {{ postgres_port }}
-          Database: {{ postgres_db }}
-          User: {{ postgres_user }}
-          Password: ({{ postgres_password | length }} chars)
+      no_log: true
 
     - name: Create Python script to query database
       copy:
@@ -53,11 +37,22 @@
           import psycopg2
           import sys
           
-          postgres_host = "{{ postgres_host }}"
-          postgres_port = "{{ postgres_port }}"
-          postgres_db = "{{ postgres_db }}"
-          postgres_user = "{{ postgres_user }}"
-          postgres_password = "{{ postgres_password }}"
+          # Read credentials from file
+          creds = {}
+          try:
+              with open('/tmp/pg_creds.conf', 'r') as f:
+                  for line in f:
+                      key, value = line.strip().split('=', 1)
+                      creds[key] = value
+          except Exception as e:
+              print(json.dumps([{"error": f"Failed to read credentials: {str(e)}"}]))
+              sys.exit(0)
+          
+          postgres_host = creds.get('host', '{{ postgres_host }}')
+          postgres_port = creds.get('port', '{{ postgres_port }}')
+          postgres_db = creds.get('database', '{{ postgres_db }}')
+          postgres_user = creds.get('username', '{{ postgres_user }}')
+          postgres_password = creds.get('password', '')
           inventory_name = "{{ inventory_name }}"
           
           try:
@@ -109,34 +104,13 @@
         hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
       ignore_errors: yes
 
-    - name: DEBUG - Show raw hosts_data
-      debug:
-        msg: |
-          Raw type: {{ hosts_data | type_debug }}
-          Raw data: {{ hosts_data }}
-
     - name: Convert dict response to list
       set_fact:
         hosts_data: "{{ [hosts_data] if hosts_data is mapping and 'name' in hosts_data else (hosts_data if hosts_data is iterable and hosts_data is not string else []) }}"
 
-    - name: DEBUG - Show converted hosts_data
-      debug:
-        msg: |
-          Converted type: {{ hosts_data | type_debug }}
-          Count: {{ hosts_data | length }}
-          Data: {{ hosts_data }}
-
     - name: Show queried hosts
       debug:
         msg: "Found {{ hosts_data | length }} hosts from AWX"
-
-    - name: List hosts
-      debug:
-        msg: "- {{ item.name }}"
-      loop: "{{ hosts_data }}"
-      when: 
-        - hosts_data | length > 0
-        - item.name is defined
 
     - name: Push host data to Grafana as annotations
       uri:
@@ -168,6 +142,12 @@
       when: 
         - hosts_data | length > 0
         - grafana_token | length > 0
+      ignore_errors: yes
+
+    - name: Cleanup credentials file
+      file:
+        path: /tmp/pg_creds.conf
+        state: absent
       ignore_errors: yes
 
     - name: Summary
