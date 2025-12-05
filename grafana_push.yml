@@ -127,6 +127,7 @@
           X-Grafana-Org-Id: "{{ GRAFANA_ORG_ID | default(1) }}"
         body_format: json
         body:
+          dashboardId: 14 # Replace with your dashboard ID
           text: "AWX simple test"
           time: "{{ (lookup('pipe','date +%s') | int) * 1000 }}"
           tags: ["awx","test"]
