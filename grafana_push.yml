@@ -138,56 +138,52 @@
     - debug:
         var: grafana_user
 
-    - name: Calculate current timestamp in milliseconds
+
+
+    - name: Compute epoch_ms (int)
       set_fact:
-        current_time_ms: "{{ ((lookup('pipe', 'date +%s') | int) * 1000) | int }}"
+        epoch_ms: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
 
-    - name: Test annotations with proper time format
-      uri:
-        url: "{{ GRAFANA_URL }}/api/annotations"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ GRAFANA_TOKEN | trim }}"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          text: "AWX Inventory Sync"
+    - name: Verify type of epoch_ms
+      debug:
+        msg: "epoch_ms={{ epoch_ms }} type={{ epoch_ms | type_debug }}"
+    # Expect: type=int
+
+    # 2) Build a dashboard-scoped annotation body using the UID (NOT numeric ID)
+    - name: Build annotation body (dashboard-scoped)
+      set_fact:
+        grafana_annotation_body:
+          dashboardUID: "adcqlkp"        # change to your dashboard's UID
+          time: "{{ epoch_ms }}"          # stays integer inside the dict
+          text: "AWX Inventory Sync — {{ AWX_INVENTORY_NAME }}"
           tags:
-            - "awx"
-            - "test"
-          time: "{{ current_time_ms | int }}"
-        validate_certs: no
-        status_code: [200, 201, 400, 404]
-        return_content: yes
-      register: result
+            - awx
+            - "{{ AWX_INVENTORY_NAME }}"
 
+    - name: Sanity check body types
+      debug:
+        msg: "time={{ grafana_annotation_body.time }} type={{ grafana_annotation_body.time | type_debug }}"
+    # Expect: type=int
 
-    - debug:
-        var: result.json
-    
-    - name: Push a minimal annotation (sanity test)
+    # 3) POST to /api/annotations
+    - name: Create annotation (dashboard-scoped)
       uri:
         url: "{{ GRAFANA_URL }}/api/annotations"
         method: POST
         headers:
           Authorization: "Bearer {{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','') }}"
           Content-Type: "application/json"
-          # If you have multiple orgs:
-          X-Grafana-Org-Id: "{{ GRAFANA_ORG_ID | default(1) }}"
+          X-Grafana-Org-Id: 1
         body_format: json
-        body:
-          text: "AWX Inventory Sync"
-          tags:
-            - "awx"
-            - "test"
-          time: "{{ current_time_ms | int }}"
+        body: "{{ grafana_annotation_body }}"
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
-      register: grafana_test_push
+      register: grafana_annotation_push
 
     - debug:
-        var: grafana_test_push
+        msg: "Status={{ grafana_annotation_push.status }} Content={{ grafana_annotation_push.content | default('') }}"
+
 
     
     
