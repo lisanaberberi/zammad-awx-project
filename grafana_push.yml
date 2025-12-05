@@ -3,7 +3,7 @@
   hosts: localhost
   gather_facts: false
   vars:
-    awx_inventory_name: "{{ lookup('env', 'AWX_INVENTORY_NAME') | default('test-inv') }}"
+    awx_inventory_name: "{{ AWX_INVENTORY_NAME }}"
 
   tasks:
 
@@ -12,16 +12,16 @@
     # -----------------------------
     - name: Set database variables from environment
       set_fact:
-        postgres_host: "{{ lookup('env', 'AWX_POSTGRES_HOST') }}"
-        postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') | int }}"
-        postgres_db: "{{ lookup('env', 'AWX_POSTGRES_DB') }}"
-        postgres_user: "{{ lookup('env', 'AWX_POSTGRES_USER') }}"
-        postgres_password: "{{ lookup('env', 'AWX_POSTGRES_PASSWORD') }}"
+        postgres_host: "{{ AWX_POSTGRES_HOST }}"
+        postgres_port: "{{ AWX_POSTGRES_PORT | int }}"
+        postgres_db: "{{ AWX_POSTGRES_DB }}"
+        postgres_user: "{{ AWX_POSTGRES_USER }}"
+        postgres_password: "{{ AWX_POSTGRES_PASSWORD }}"
 
     - name: Set Grafana variables from environment
       set_fact:
-        grafana_url: "{{ lookup('env', 'GRAFANA_URL') }}"
-        grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
+        grafana_url: "{{ GRAFANA_URL }}"
+        grafana_token: "{{ GRAFANA_TOKEN }}"
 
     # -----------------------------
     # 2️⃣ Validate required environment variables
