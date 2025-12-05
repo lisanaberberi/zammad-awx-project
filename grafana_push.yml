@@ -50,7 +50,7 @@
         positional_args:
           - "{{ awx_inventory_name }}"
       register: db_hosts
-      no_log: true
+      no_log: false # temp to see query results during testing
 
     - name: Parse host variables
       set_fact:
