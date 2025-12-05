@@ -25,7 +25,7 @@
 
     - name: Get PostgreSQL credentials from Kubernetes secret
       shell: |
-        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data.password}' | base64 -d
+        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data.password}' | jq .
       register: k8s_password_result
       ignore_errors: yes
       changed_when: false
