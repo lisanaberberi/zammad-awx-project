@@ -22,6 +22,13 @@
         state: present
       ignore_errors: yes
 
+    - name: Install required system packages (jq and kubectl)
+      shell: |
+        which jq || (apt-get update && apt-get install -y jq 2>/dev/null || yum install -y jq 2>/dev/null || apk add jq 2>/dev/null || echo "jq install skipped")
+        which kubectl || (curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x kubectl && mv kubectl /usr/local/bin/ 2>/dev/null || echo "kubectl install skipped")
+      ignore_errors: yes
+      changed_when: false
+
     - name: Get PostgreSQL credentials from Kubernetes secret
       shell: |
         kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data}' | jq -r 'to_entries[] | "\(.key)=\(.value | @base64d)"' > /tmp/pg_creds.conf
@@ -111,6 +118,20 @@
     - name: Show queried hosts
       debug:
         msg: "Found {{ hosts_data | length }} hosts from AWX"
+
+    - name: DEBUG - Show detailed hosts data
+      debug:
+        msg: |
+          Hosts data type: {{ hosts_data | type_debug }}
+          Hosts data content: {{ hosts_data }}
+          Grafana URL: {{ grafana_url }}
+          Grafana token length: {{ grafana_token | length }}
+
+    - name: DEBUG - Show first host details
+      debug:
+        msg: |
+          First host: {{ hosts_data[0] | default('NO DATA') }}
+      when: hosts_data | length > 0
 
     - name: Push host data to Grafana as annotations
       uri:
