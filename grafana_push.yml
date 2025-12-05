@@ -109,9 +109,22 @@
         hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
       ignore_errors: yes
 
-    - name: Convert to list if dict
+    - name: DEBUG - Show raw hosts_data
+      debug:
+        msg: |
+          Raw type: {{ hosts_data | type_debug }}
+          Raw data: {{ hosts_data }}
+
+    - name: Convert dict response to list
       set_fact:
-        hosts_data: "{{ hosts_data if hosts_data is iterable and hosts_data is not string and hosts_data is not mapping else ([hosts_data] if hosts_data else []) }}"
+        hosts_data: "{{ [hosts_data] if hosts_data is mapping and 'name' in hosts_data else (hosts_data if hosts_data is iterable and hosts_data is not string else []) }}"
+
+    - name: DEBUG - Show converted hosts_data
+      debug:
+        msg: |
+          Converted type: {{ hosts_data | type_debug }}
+          Count: {{ hosts_data | length }}
+          Data: {{ hosts_data }}
 
     - name: Show queried hosts
       debug:
