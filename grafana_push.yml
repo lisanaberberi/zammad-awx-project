@@ -24,8 +24,17 @@
 
     - name: Install required system packages (jq and kubectl)
       shell: |
-        which jq || (apt-get update && apt-get install -y jq 2>/dev/null || yum install -y jq 2>/dev/null || apk add jq 2>/dev/null || echo "jq install skipped")
-        which kubectl || (curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && chmod +x kubectl && mv kubectl /usr/local/bin/ 2>/dev/null || echo "kubectl install skipped")
+        # Install jq
+        if ! command -v jq &> /dev/null; then
+          apt-get update -qq && apt-get install -y jq 2>/dev/null || yum install -y jq 2>/dev/null || apk add jq 2>/dev/null
+        fi
+        
+        # Install kubectl
+        if ! command -v kubectl &> /dev/null; then
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" 2>/dev/null
+          chmod +x kubectl
+          mv kubectl /usr/local/bin/
+        fi
       ignore_errors: yes
       changed_when: false
 
@@ -40,7 +49,6 @@
       debug:
         msg: |
           Return code: {{ k8s_creds_result.rc }}
-          Stdout: {{ k8s_creds_result.stdout }}
           Stderr: {{ k8s_creds_result.stderr }}
 
     - name: Create Python script to query database
