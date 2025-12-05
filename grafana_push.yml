@@ -6,29 +6,32 @@
   become: no
 
   vars:
-    postgres_host: "{{ AWX_POSTGRES_HOST | default('awx-postgres-15') }}"
-    postgres_port: "{{ AWX_POSTGRES_PORT | default('5432') }}"
-    postgres_db: "{{ AWX_POSTGRES_DB | default('awx') }}"
-    postgres_user: "{{ AWX_POSTGRES_USER | default('awx') }}"
-    postgres_password: ""
+    postgres_host: "{{ AWX_POSTGRES_HOST | default(lookup('env', 'AWX_POSTGRES_HOST')) }}"
+    postgres_port: "{{ AWX_POSTGRES_PORT | default(lookup('env', 'AWX_POSTGRES_PORT') | default('5432')) }}"
+    postgres_db: "{{ AWX_POSTGRES_DB | default(lookup('env', 'AWX_POSTGRES_DB') | default('awx')) }}"
+    postgres_user: "{{ AWX_POSTGRES_USER | default(lookup('env', 'AWX_POSTGRES_USER') | default('awx')) }}"
+    postgres_password: "{{ AWX_POSTGRES_PASSWORD | default(lookup('env', 'AWX_POSTGRES_PASSWORD')) }}"
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
-    grafana_url: "{{ GRAFANA_URL | default('') }}"
-    grafana_token: "{{ GRAFANA_TOKEN | default('') }}"
+    grafana_url: "{{ GRAFANA_URL | default(lookup('env', 'GRAFANA_URL')) }}"
+    grafana_token: "{{ GRAFANA_TOKEN | default(lookup('env', 'GRAFANA_TOKEN')) }}"
+
+  pre_tasks:
+    - name: Validate required variables
+      assert:
+        that:
+          - postgres_host is defined and postgres_host | length > 0
+          - grafana_url is defined and grafana_url | length > 0
+          - grafana_token is defined and grafana_token | length > 0
+        fail_msg: "Missing required environment variables"
 
   tasks:
-    - name: Install required Python packages
-      pip:
-        name:
-          - psycopg2-binary
-        state: present
-      ignore_errors: yes
-
     - name: Get PostgreSQL credentials from Kubernetes secret
       shell: |
-        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data.password}' | base64 -d
-      register: k8s_password_result
+        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data}' | jq -r 'to_entries | map("\(.key)=\(.value | @base64d)") | .[]'
+      register: k8s_creds_result
       ignore_errors: yes
       changed_when: false
+
 
     - name: Set password from Kubernetes secret
       set_fact:
