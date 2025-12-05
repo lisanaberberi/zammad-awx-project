@@ -114,6 +114,32 @@
       debug:
         msg: "Found {{ parsed_hosts | length }} hosts in inventory '{{ awx_inventory_name }}'"
 
+    
+    
+    - name: Push a minimal annotation (sanity test)
+      uri:
+        url: "{{ GRAFANA_URL }}/api/annotations"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','') }}"
+          Content-Type: "application/json"
+          # If you have multiple orgs:
+          X-Grafana-Org-Id: "{{ GRAFANA_ORG_ID | default(1) }}"
+        body_format: json
+        body:
+          text: "AWX simple test"
+          time: "{{ (lookup('pipe','date +%s') | int) * 1000 }}"
+          tags: ["awx","test"]
+        validate_certs: no
+        status_code: [200, 201, 202, 204]
+        return_content: yes
+      register: grafana_test_push
+
+    - debug:
+        var: grafana_test_push
+
+    
+    
     - name: Push each host to Grafana annotations
       uri:
         url: "{{ grafana_url }}/api/annotations"
