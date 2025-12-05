@@ -43,7 +43,7 @@
     - name: Query AWX inventory hosts
       community.postgresql.postgresql_query:
         login_host: "{{ postgres_host }}"
-        login_port: "{{ postgres_port }}"
+        login_port: "{{ postgres_port | int }}"
         login_user: "{{ postgres_user }}"
         login_password: "{{ postgres_password }}"
         db: "{{ postgres_db }}"
@@ -55,7 +55,8 @@
           ORDER BY h.name
         positional_args:
           - "{{ awx_inventory_name }}"
-      register: inventory_hosts
+      delegate_to: localhost
+
 
     # -----------------------------
     # 4️⃣ Push inventory to Grafana (example)
