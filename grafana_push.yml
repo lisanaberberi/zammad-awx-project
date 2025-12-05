@@ -55,7 +55,9 @@
           ORDER BY h.name
         positional_args:
           - "{{ awx_inventory_name }}"
+        login_unix_socket: ''
       delegate_to: localhost
+      
 
 
     # -----------------------------
