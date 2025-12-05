@@ -21,7 +21,7 @@
     - name: Set Grafana variables from environment
       set_fact:
         grafana_url: "{{ GRAFANA_URL }}"
-        grafana_token: "{{ GRAFANA_TOKEN }}"
+        grafana_token: "{{ GRAFANA_TOKEN | trim}}"
 
     # -----------------------------
     # 2️⃣ Validate required environment variables
@@ -146,6 +146,7 @@
         label: "{{ item.name }}"
       register: grafana_push_result
       failed_when: false
+      
 
     - name: Report failed pushes
       debug:
@@ -173,7 +174,7 @@
             Total Hosts: {{ parsed_hosts | length }}
             Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
             Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
-          time: "{{ (now() | to_datetime | to_timestamp | int) }}000"
+          time: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
 
         validate_certs: no
         status_code: [200, 204]
