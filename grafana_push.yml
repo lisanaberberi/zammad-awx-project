@@ -114,108 +114,130 @@
       debug:
         msg: "Found {{ parsed_hosts | length }} hosts in inventory '{{ awx_inventory_name }}'"
 
-    
-    
-    - name: Push a minimal annotation (sanity test)
+    - name: Test Grafana connectivity
       uri:
-        url: "{{ GRAFANA_URL }}/api/annotations"
-        method: POST
+        url: "{{ GRAFANA_URL }}/api/health"
+        method: GET
         headers:
-          Authorization: "Bearer {{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','') }}"
-          Content-Type: "application/json"
-          # If you have multiple orgs:
-          X-Grafana-Org-Id: "{{ GRAFANA_ORG_ID | default(1) }}"
-        body_format: json
-        body:
-          dashboardId: 14 # Replace with your dashboard ID
-          text: "AWX simple test"
-          time: "{{ (lookup('pipe','date +%s') | int) * 1000 }}"
-          tags: ["awx","test"]
+          Authorization: "Bearer {{ GRAFANA_TOKEN }}"
         validate_certs: no
-        status_code: [200, 201, 202, 204]
-        return_content: yes
-      register: grafana_test_push
-
+      register: grafana_health
+    
     - debug:
-        var: grafana_test_push
+        var: grafana_health
+
+    - name: Check Grafana user
+      uri:
+        url: "{{ GRAFANA_URL }}/api/user"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ GRAFANA_TOKEN }}"
+        validate_certs: no
+      register: grafana_user
+    
+    - debug:
+        var: grafana_user
+    
+    # - name: Push a minimal annotation (sanity test)
+    #   uri:
+    #     url: "{{ GRAFANA_URL }}/api/annotations"
+    #     method: POST
+    #     headers:
+    #       Authorization: "Bearer {{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','') }}"
+    #       Content-Type: "application/json"
+    #       # If you have multiple orgs:
+    #       X-Grafana-Org-Id: "{{ GRAFANA_ORG_ID | default(1) }}"
+    #     body_format: json
+    #     body:
+    #       time: "{{ (lookup('pipe','date +%s') | int) * 1000 }}"   # integer ms, no quotes
+    #       text: "AWX Inventory Sync — {{ AWX_INVENTORY_NAME }}"
+
+    #       tags: ["awx","test"]
+    #     validate_certs: no
+    #     status_code: [200, 201, 202, 204]
+    #     return_content: yes
+    #   register: grafana_test_push
+
+    # - debug:
+    #     var: grafana_test_push
 
     
     
-    - name: Push each host to Grafana annotations
-      uri:
-        url: "{{ grafana_url }}/api/annotations"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ grafana_token }}"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          tags:
-            - "awx_inventory"
-            - "{{ awx_inventory_name }}"
-            - "{{ item.name }}"
-          text: |
-            **Host:** {{ item.name }}
-            **ID:** {{ item.id }}
-            {% if item.vars.zammad_info is defined %}
-            **Zammad Version:** {{ item.vars.zammad_info.zammad_version | default('N/A') }}
-            **RAM:** {{ item.vars.zammad_info.ram_gb | default('N/A') }} GB
-            **OS:** {{ item.vars.zammad_info.os | default('N/A') }}
-            **Status:** {{ 'Active' if item.vars.zammad_info.zammad_active | default(false) else 'Inactive' }}
-            {% else %}
-            No Zammad info available
-            {% endif %}
-          time: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
-        validate_certs: no
-        status_code: [200, 204]
-      loop: "{{ parsed_hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
-      register: grafana_push_result
-      failed_when: false
+    # - name: Push each host to Grafana annotations
+    #   uri:
+    #     url: "{{ grafana_url }}/api/annotations"
+    #     method: POST
+    #     headers:
+    #       Authorization: "Bearer {{ grafana_token }}"
+    #       Content-Type: "application/json"
+    #     body_format: json
+    #     body:
+    #       tags:
+    #         - "awx_inventory"
+    #         - "{{ awx_inventory_name }}"
+    #         - "{{ item.name }}"
+    #       text: |
+    #         **Host:** {{ item.name }}
+    #         **ID:** {{ item.id }}
+    #         {% if item.vars.zammad_info is defined %}
+    #         **Zammad Version:** {{ item.vars.zammad_info.zammad_version | default('N/A') }}
+    #         **RAM:** {{ item.vars.zammad_info.ram_gb | default('N/A') }} GB
+    #         **OS:** {{ item.vars.zammad_info.os | default('N/A') }}
+    #         **Status:** {{ 'Active' if item.vars.zammad_info.zammad_active | default(false) else 'Inactive' }}
+    #         {% else %}
+    #         No Zammad info available
+    #         {% endif %}
+    #       time: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
+    #     validate_certs: no
+    #     status_code: [200, 204]
+    #   loop: "{{ parsed_hosts }}"
+    #   loop_control:
+    #     label: "{{ item.name }}"
+    #   register: grafana_push_result
+    #   failed_when: false
       
 
-    - name: Report failed pushes
-      debug:
-        msg: "Failed to push {{ item.item.name }}: {{ item.msg | default('Unknown error') }}"
-      loop: "{{ grafana_push_result.results }}"
-      loop_control:
-        label: "{{ item.item.name }}"
-      when: item.failed | default(false)
+    # - name: Report failed pushes
+    #   debug:
+    #     msg: "Failed to push {{ item.item.name }}: {{ item.msg | default('Unknown error') }}"
+    #   loop: "{{ grafana_push_result.results }}"
+    #   loop_control:
+    #     label: "{{ item.item.name }}"
+    #   when: item.failed | default(false)
 
-    - name: Push inventory summary to Grafana
-      uri:
-        url: "{{ grafana_url }}/api/annotations"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ grafana_token }}"
-          Content-Type: "application/json"
-        body_format: json
-        body:
-          tags:
-            - "awx_inventory_sync"
-            - "{{ awx_inventory_name }}"
-          text: |
-            **Inventory Sync Complete**
-            Inventory: {{ awx_inventory_name }}
-            Total Hosts: {{ parsed_hosts | length }}
-            Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
-            Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
-          time: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
+    # - name: Push inventory summary to Grafana
+    #   uri:
+    #     url: "{{ grafana_url }}/api/annotations"
+    #     method: POST
+    #     headers:
+    #       Authorization: "Bearer {{ grafana_token }}"
+    #       Content-Type: "application/json"
+    #     body_format: json
+    #     body:
+    #       tags:
+    #         - "awx_inventory_sync"
+    #         - "{{ awx_inventory_name }}"
+    #       text: |
+    #         **Inventory Sync Complete**
+    #         Inventory: {{ awx_inventory_name }}
+    #         Total Hosts: {{ parsed_hosts | length }}
+    #         Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
+    #         Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
+    #       time: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
 
-        validate_certs: no
-        status_code: [200, 204]
-      when: parsed_hosts | length > 0
+    #     validate_certs: no
+    #     status_code: [200, 204]
+    #   when: parsed_hosts | length > 0
 
-    - name: Final Summary
-      debug:
-        msg: |
-          ========================================
-          AWX → Grafana Sync Complete
-          Inventory: {{ awx_inventory_name }}
-          Total Hosts: {{ parsed_hosts | length }}
-          Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
-          Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
-          Grafana URL: {{ grafana_url }}
-          Timestamp: {{ (now() | to_datetime).isoformat() }}
-          ========================================
+    # - name: Final Summary
+    #   debug:
+    #     msg: |
+    #       ========================================
+    #       AWX → Grafana Sync Complete
+    #       Inventory: {{ awx_inventory_name }}
+    #       Total Hosts: {{ parsed_hosts | length }}
+    #       Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
+    #       Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
+    #       Grafana URL: {{ grafana_url }}
+    #       Timestamp: {{ (now() | to_datetime).isoformat() }}
+    #       ========================================
