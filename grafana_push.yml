@@ -32,9 +32,16 @@
     - name: Get PostgreSQL credentials from Kubernetes secret
       shell: |
         kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data}' | jq -r 'to_entries[] | "\(.key)=\(.value | @base64d)"' > /tmp/pg_creds.conf
+      register: k8s_creds_result
       ignore_errors: yes
       changed_when: false
-      no_log: true
+
+    - name: DEBUG - Show kubectl/jq result
+      debug:
+        msg: |
+          Return code: {{ k8s_creds_result.rc }}
+          Stdout: {{ k8s_creds_result.stdout }}
+          Stderr: {{ k8s_creds_result.stderr }}
 
     - name: Create Python script to query database
       copy:
@@ -106,14 +113,23 @@
       ignore_errors: yes
       changed_when: false
 
+    - name: DEBUG - Show raw database output
+      debug:
+        msg: |
+          Raw stdout: {{ db_query_result.stdout }}
+          Return code: {{ db_query_result.rc }}
+
     - name: Set hosts data
       set_fact:
         hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
       ignore_errors: yes
 
-    - name: Convert dict response to list
-      set_fact:
-        hosts_data: "{{ [hosts_data] if hosts_data is mapping and 'name' in hosts_data else (hosts_data if hosts_data is iterable and hosts_data is not string else []) }}"
+    - name: DEBUG - Show hosts_data after parsing
+      debug:
+        msg: |
+          Type: {{ hosts_data | type_debug }}
+          Length: {{ hosts_data | length if hosts_data is iterable else 'not iterable' }}
+          Content: {{ hosts_data }}
 
     - name: Show queried hosts
       debug:
