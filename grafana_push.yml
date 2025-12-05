@@ -137,6 +137,31 @@
     
     - debug:
         var: grafana_user
+
+    - name: Calculate current timestamp in milliseconds
+      set_fact:
+        current_time_ms: "{{ ((lookup('pipe', 'date +%s') | int) * 1000) }}"
+
+    - name: Test annotations with proper time format
+      uri:
+        url: "{{ GRAFANA_URL }}/api/annotations"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ GRAFANA_TOKEN | trim }}"
+          Content-Type: "application/json"
+        body: |
+          {
+            "text": "AWX Inventory Sync",
+            "tags": ["awx", "test"],
+            "time": {{ current_time_ms }}
+          }
+        validate_certs: no
+        status_code: [200, 201, 400, 404]
+        return_content: yes
+      register: result
+
+    - debug:
+        var: result.json
     
     - name: Push a minimal annotation (sanity test)
       uri:
@@ -148,11 +173,12 @@
           # If you have multiple orgs:
           X-Grafana-Org-Id: "{{ GRAFANA_ORG_ID | default(1) }}"
         body_format: json
-        body:
-          time: "{{ (lookup('pipe','date +%s') | int) * 1000 }}"   # integer ms, no quotes
-          text: "AWX Inventory Sync — {{ AWX_INVENTORY_NAME }}"
-
-          tags: ["awx","test"]
+        body: |
+          {
+            time: {{ current_time_ms }},
+            text: "AWX Inventory Sync" ,
+            tags: ["awx","test"]
+          }
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
