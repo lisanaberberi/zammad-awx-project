@@ -1,43 +1,49 @@
 ---
 - name: Export AWX Inventory Hosts to Grafana
   hosts: localhost
-  gather_facts: no
-  connection: local
-  become: no
-
-  collections:
-    - community.postgresql
-
+  gather_facts: false
   vars:
-    # PostgreSQL credentials from environment variables
-    postgres_host: "{{ lookup('env','POSTGRES_HOST') }}"
-    postgres_port: "{{ lookup('env','POSTGRES_PORT') | default('5432') }}"
-    postgres_db: "{{ lookup('env','POSTGRES_DB') | default('awx') }}"
-    postgres_user: "{{ lookup('env','POSTGRES_USER') }}"
-    postgres_password: "{{ lookup('env','POSTGRES_PASSWORD') }}"
-    # Grafana credentials
-    grafana_url: "{{ lookup('env','GRAFANA_URL') }}"
-    grafana_token: "{{ lookup('env','GRAFANA_TOKEN') }}"
-    # Inventory to export
-    awx_inventory_name: "{{ lookup('env','AWX_INVENTORY') | default('test-inv') }}"
-
-  pre_tasks:
-    - name: Validate required environment variables
-      assert:
-        that:
-          - postgres_host is defined
-          - postgres_user is defined
-          - postgres_password is defined
-          - grafana_url is defined
-          - grafana_token is defined
-        fail_msg: "Missing required environment variables!"
+    awx_inventory_name: "{{ lookup('env', 'AWX_INVENTORY_NAME') | default('test-inv') }}"
 
   tasks:
 
+    # -----------------------------
+    # 1️⃣ Map environment variables
+    # -----------------------------
+    - name: Set database variables from environment
+      set_fact:
+        postgres_host: "{{ lookup('env', 'AWX_POSTGRES_HOST') }}"
+        postgres_port: "{{ lookup('env', 'AWX_POSTGRES_PORT') | int }}"
+        postgres_db: "{{ lookup('env', 'AWX_POSTGRES_DB') }}"
+        postgres_user: "{{ lookup('env', 'AWX_POSTGRES_USER') }}"
+        postgres_password: "{{ lookup('env', 'AWX_POSTGRES_PASSWORD') }}"
+
+    - name: Set Grafana variables from environment
+      set_fact:
+        grafana_url: "{{ lookup('env', 'GRAFANA_URL') }}"
+        grafana_token: "{{ lookup('env', 'GRAFANA_TOKEN') }}"
+
+    # -----------------------------
+    # 2️⃣ Validate required environment variables
+    # -----------------------------
+    - name: Validate required environment variables
+      assert:
+        that:
+          - postgres_host is defined and postgres_host != ''
+          - postgres_port is defined
+          - postgres_db is defined and postgres_db != ''
+          - postgres_user is defined and postgres_user != ''
+          - grafana_url is defined and grafana_url != ''
+          - grafana_token is defined and grafana_token != ''
+        fail_msg: "One or more required environment variables are missing."
+
+    # -----------------------------
+    # 3️⃣ Query AWX inventory hosts
+    # -----------------------------
     - name: Query AWX inventory hosts
       community.postgresql.postgresql_query:
         login_host: "{{ postgres_host }}"
-        login_port: "{{ postgres_port | int }}"
+        login_port: "{{ postgres_port }}"
         login_user: "{{ postgres_user }}"
         login_password: "{{ postgres_password }}"
         db: "{{ postgres_db }}"
@@ -49,16 +55,11 @@
           ORDER BY h.name
         positional_args:
           - "{{ awx_inventory_name }}"
-      register: db_hosts
-      no_log: false # temp to see query results during testing
+      register: inventory_hosts
 
-    - name: Parse host variables
-      set_fact:
-        parsed_hosts: >-
-          {{
-            db_hosts.query_result | map('combine', {'vars': (item.variables | from_json if item.variables else {}) }) | list
-          }}
-
+    # -----------------------------
+    # 4️⃣ Push inventory to Grafana (example)
+    # -----------------------------
     - name: Show host count
       debug:
         msg: "Found {{ parsed_hosts | length }} hosts in inventory '{{ awx_inventory_name }}'"
