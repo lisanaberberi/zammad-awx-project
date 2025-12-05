@@ -1,140 +1,69 @@
 ---
-- name: Extract AWX Host Data and Push to Grafana
+- name: Export AWX Inventory Hosts to Grafana
   hosts: localhost
   gather_facts: no
   connection: local
   become: no
 
   collections:
-    - community.kubernetes
+    - community.postgresql
 
   vars:
-    # Default values read from AWX env variables
-    inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
-    grafana_url: "{{ GRAFANA_URL | default(lookup('env', 'GRAFANA_URL')) }}"
-    grafana_token: "{{ GRAFANA_TOKEN | default(lookup('env', 'GRAFANA_TOKEN')) }}"
-
-    # Kubernetes location for the AWX database
-    awx_namespace: "awx"
-    awx_pg_secret: "awx-postgres-configuration"
+    # PostgreSQL credentials from environment variables
+    postgres_host: "{{ lookup('env','POSTGRES_HOST') }}"
+    postgres_port: "{{ lookup('env','POSTGRES_PORT') | default('5432') }}"
+    postgres_db: "{{ lookup('env','POSTGRES_DB') | default('awx') }}"
+    postgres_user: "{{ lookup('env','POSTGRES_USER') }}"
+    postgres_password: "{{ lookup('env','POSTGRES_PASSWORD') }}"
+    # Grafana credentials
+    grafana_url: "{{ lookup('env','GRAFANA_URL') }}"
+    grafana_token: "{{ lookup('env','GRAFANA_TOKEN') }}"
+    # Inventory to export
+    awx_inventory_name: "{{ lookup('env','AWX_INVENTORY') | default('test-inv') }}"
 
   pre_tasks:
-    - name: Validate required Grafana variables
+    - name: Validate required environment variables
       assert:
         that:
-          - grafana_url is defined and grafana_url | length > 0
-          - grafana_token is defined and grafana_token | length > 0
-        fail_msg: "Missing required Grafana environment variables"
+          - postgres_host is defined
+          - postgres_user is defined
+          - postgres_password is defined
+          - grafana_url is defined
+          - grafana_token is defined
+        fail_msg: "Missing required environment variables!"
 
   tasks:
-    ###########################################################################
-    # 1. Read PostgreSQL credentials from Kubernetes (native, no kubectl)
-    ###########################################################################
-    - name: Read AWX PostgreSQL secret
-      community.kubernetes.k8s_info:
-        api_version: v1
-        kind: Secret
-        name: "{{ awx_pg_secret }}"
-        namespace: "{{ awx_namespace }}"
-      register: awx_pg
 
-    - name: Ensure secret exists
-      assert:
-        that:
-          - awx_pg.resources | length > 0
-        fail_msg: "The secret '{{ awx_pg_secret }}' was not found in namespace '{{ awx_namespace }}'"
+    - name: Query AWX inventory hosts
+      community.postgresql.postgresql_query:
+        login_host: "{{ postgres_host }}"
+        login_port: "{{ postgres_port }}"
+        login_user: "{{ postgres_user }}"
+        login_password: "{{ postgres_password }}"
+        db: "{{ postgres_db }}"
+        query: |
+          SELECT h.id, h.name, h.variables
+          FROM main_host h
+          JOIN main_inventory i ON h.inventory_id = i.id
+          WHERE i.name = %s
+          ORDER BY h.name
+        positional_args:
+          - "{{ awx_inventory_name }}"
+      register: db_hosts
+      no_log: true
 
-    - name: Decode PostgreSQL credentials
+    - name: Parse host variables
       set_fact:
-        postgres_host: "{{ awx_pg.resources[0].data.host | b64decode }}"
-        postgres_port: "{{ awx_pg.resources[0].data.port | b64decode | default('5432') }}"
-        postgres_db: "{{ awx_pg.resources[0].data.database | b64decode | default('awx') }}"
-        postgres_user: "{{ awx_pg.resources[0].data.username | b64decode | default('awx') }}"
-        postgres_password: "{{ awx_pg.resources[0].data.password | b64decode }}"
+        parsed_hosts: >-
+          {{
+            db_hosts.query_result | map('combine', {'vars': (item.variables | from_json if item.variables else {}) }) | list
+          }}
 
-    - name: Show connection details
+    - name: Show host count
       debug:
-        msg: |
-          PostgreSQL Connection:
-          Host: {{ postgres_host }}
-          Port: {{ postgres_port }}
-          Database: {{ postgres_db }}
-          User: {{ postgres_user }}
-          Password length: {{ postgres_password | length }}
+        msg: "Found {{ parsed_hosts | length }} hosts in inventory '{{ awx_inventory_name }}'"
 
-    ###########################################################################
-    # 2. Query AWX database to extract host inventory data
-    ###########################################################################
-    - name: Create temporary Python AWX DB query script
-      copy:
-        content: |
-          #!/usr/bin/env python3
-          import json
-          import psycopg2
-          import sys
-
-          try:
-              conn = psycopg2.connect(
-                  host="{{ postgres_host }}",
-                  port={{ postgres_port }},
-                  database="{{ postgres_db }}",
-                  user="{{ postgres_user }}",
-                  password="{{ postgres_password }}"
-              )
-              cur = conn.cursor()
-              cur.execute("""
-                  SELECT json_agg(row_to_json(t))
-                  FROM (
-                      SELECT 
-                          h.id,
-                          h.name,
-                          h.variables
-                      FROM main_host h
-                      JOIN main_inventory i ON h.inventory_id = i.id
-                      WHERE i.name = %s
-                      ORDER BY h.name
-                  ) t
-              """, ("{{ inventory_name }}",))
-              result = cur.fetchone()
-              print(json.dumps(result[0] if result and result[0] else []))
-              cur.close()
-              conn.close()
-
-          except Exception as e:
-              print(json.dumps([{"error": str(e)}]))
-              sys.exit(1)
-        dest: /tmp/query_awx_db.py
-        mode: '0755'
-
-    - name: Run AWX DB query script
-      command: python3 /tmp/query_awx_db.py
-      register: db_query_result
-      changed_when: false
-
-    - name: Parse DB result into hosts_data
-      set_fact:
-        hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
-
-    - name: Ensure list format
-      set_fact:
-        hosts_data: >-
-          {{ hosts_data if hosts_data is iterable and hosts_data is not string and hosts_data is not mapping
-             else ([hosts_data] if hosts_data else []) }}
-
-    - name: Show queried hosts
-      debug:
-        msg: "Found {{ hosts_data | length }} hosts"
-
-    - name: List hosts
-      debug:
-        msg: "- {{ item.name }}"
-      loop: "{{ hosts_data }}"
-      when: item.name is defined
-
-    ###########################################################################
-    # 3. Push host data to Grafana as Annotations
-    ###########################################################################
-    - name: Push host data to Grafana
+    - name: Push each host to Grafana annotations
       uri:
         url: "{{ grafana_url }}/api/annotations"
         method: POST
@@ -143,36 +72,70 @@
           Content-Type: "application/json"
         body_format: json
         body:
-          dashboardId: 0
-          panelId: 0
           tags:
-            - "zammad_inventory"
+            - "awx_inventory"
+            - "{{ awx_inventory_name }}"
             - "{{ item.name }}"
           text: |
             **Host:** {{ item.name }}
-            Zammad: {{ (item.variables | from_json).zammad_info.zammad_version | default('-') }}
-            Redis: {{ (item.variables | from_json).redis_info.version | default('-') }}
-            Elasticsearch: {{ (item.variables | from_json).elasticsearch_info.version | default('-') }}
-            RAM: {{ (item.variables | from_json).zammad_info.ram_gb | default('-') }} GB
-            Status: {{ 'Active' if (item.variables | from_json).zammad_info.zammad_active else 'Inactive' }}
-            OS: {{ (item.variables | from_json).zammad_info.os | default('-') }}
-            IP: {{ (item.variables | from_json).zammad_info.ip_address | default('-') }}
-            Owner: {{ (item.variables | from_json).zammad_info.owner | default('-') }}
+            **ID:** {{ item.id }}
+            {% if item.vars.zammad_info is defined %}
+            **Zammad Version:** {{ item.vars.zammad_info.zammad_version | default('N/A') }}
+            **RAM:** {{ item.vars.zammad_info.ram_gb | default('N/A') }} GB
+            **OS:** {{ item.vars.zammad_info.os | default('N/A') }}
+            **Status:** {{ 'Active' if item.vars.zammad_info.zammad_active | default(false) else 'Inactive' }}
+            {% else %}
+            No Zammad info available
+            {% endif %}
           time: "{{ ansible_date_time.epoch | int }}000"
         validate_certs: no
-      loop: "{{ hosts_data }}"
-      ignore_errors: yes
+        status_code: [200, 204]
+      loop: "{{ parsed_hosts }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: grafana_push_result
+      failed_when: false
 
-    ###########################################################################
-    # 4. Summary
-    ###########################################################################
-    - name: Summary
+    - name: Report failed pushes
+      debug:
+        msg: "Failed to push {{ item.item.name }}: {{ item.msg | default('Unknown error') }}"
+      loop: "{{ grafana_push_result.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      when: item.failed | default(false)
+
+    - name: Push inventory summary to Grafana
+      uri:
+        url: "{{ grafana_url }}/api/annotations"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ grafana_token }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          tags:
+            - "awx_inventory_sync"
+            - "{{ awx_inventory_name }}"
+          text: |
+            **Inventory Sync Complete**
+            Inventory: {{ awx_inventory_name }}
+            Total Hosts: {{ parsed_hosts | length }}
+            Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
+            Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
+          time: "{{ ansible_date_time.epoch | int }}000"
+        validate_certs: no
+        status_code: [200, 204]
+      when: parsed_hosts | length > 0
+
+    - name: Final Summary
       debug:
         msg: |
           ========================================
-          Zammad to Grafana Push Complete
-          ========================================
-          Hosts processed: {{ hosts_data | length }}
+          AWX → Grafana Sync Complete
+          Inventory: {{ awx_inventory_name }}
+          Total Hosts: {{ parsed_hosts | length }}
+          Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
+          Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
           Grafana URL: {{ grafana_url }}
           Timestamp: {{ ansible_date_time.iso8601 }}
           ========================================
