@@ -45,7 +45,7 @@
         login_host: "{{ postgres_host }}"
         login_port: "{{ postgres_port | int }}"
         login_user: "{{ postgres_user }}"
-        login_password: "{{ postgres_password }}"
+        login_password: "{{ postgres_password  | trim}}"
         db: "{{ postgres_db }}"
         query: |
           SELECT h.id, h.name, h.variables
