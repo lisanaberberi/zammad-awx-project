@@ -10,6 +10,7 @@
     postgres_port: "{{ AWX_POSTGRES_PORT | default('5432') }}"
     postgres_db: "{{ AWX_POSTGRES_DB | default('awx') }}"
     postgres_user: "{{ AWX_POSTGRES_USER | default('awx') }}"
+    postgres_password: ""
     inventory_name: "{{ awx_inventory_name | default('test-inv') }}"
     grafana_url: "{{ GRAFANA_URL | default('') }}"
     grafana_token: "{{ GRAFANA_TOKEN | default('') }}"
@@ -22,34 +23,27 @@
         state: present
       ignore_errors: yes
 
-    - name: Install required system packages (jq and kubectl)
-      shell: |
-        # Install jq
-        if ! command -v jq &> /dev/null; then
-          apt-get update -qq && apt-get install -y jq 2>/dev/null || yum install -y jq 2>/dev/null || apk add jq 2>/dev/null
-        fi
-        
-        # Install kubectl
-        if ! command -v kubectl &> /dev/null; then
-          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" 2>/dev/null
-          chmod +x kubectl
-          mv kubectl /usr/local/bin/
-        fi
-      ignore_errors: yes
-      changed_when: false
-
     - name: Get PostgreSQL credentials from Kubernetes secret
       shell: |
-        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data}' | jq -r 'to_entries[] | "\(.key)=\(.value | @base64d)"' > /tmp/pg_creds.conf
-      register: k8s_creds_result
+        kubectl get secret -n awx awx-postgres-configuration -o jsonpath='{.data.password}' | base64 -d
+      register: k8s_password_result
       ignore_errors: yes
       changed_when: false
 
-    - name: DEBUG - Show kubectl/jq result
+    - name: Set password from Kubernetes secret
+      set_fact:
+        postgres_password: "{{ k8s_password_result.stdout }}"
+      when: k8s_password_result.rc == 0
+
+    - name: Show connection details
       debug:
         msg: |
-          Return code: {{ k8s_creds_result.rc }}
-          Stderr: {{ k8s_creds_result.stderr }}
+          Connecting to PostgreSQL:
+          Host: {{ postgres_host }}
+          Port: {{ postgres_port }}
+          Database: {{ postgres_db }}
+          User: {{ postgres_user }}
+          Password: ({{ postgres_password | length }} chars)
 
     - name: Create Python script to query database
       copy:
@@ -59,22 +53,11 @@
           import psycopg2
           import sys
           
-          # Read credentials from file
-          creds = {}
-          try:
-              with open('/tmp/pg_creds.conf', 'r') as f:
-                  for line in f:
-                      key, value = line.strip().split('=', 1)
-                      creds[key] = value
-          except Exception as e:
-              print(json.dumps([{"error": f"Failed to read credentials: {str(e)}"}]))
-              sys.exit(0)
-          
-          postgres_host = creds.get('host', '{{ postgres_host }}')
-          postgres_port = creds.get('port', '{{ postgres_port }}')
-          postgres_db = creds.get('database', '{{ postgres_db }}')
-          postgres_user = creds.get('username', '{{ postgres_user }}')
-          postgres_password = creds.get('password', '')
+          postgres_host = "{{ postgres_host }}"
+          postgres_port = "{{ postgres_port }}"
+          postgres_db = "{{ postgres_db }}"
+          postgres_user = "{{ postgres_user }}"
+          postgres_password = "{{ postgres_password }}"
           inventory_name = "{{ inventory_name }}"
           
           try:
@@ -121,41 +104,26 @@
       ignore_errors: yes
       changed_when: false
 
-    - name: DEBUG - Show raw database output
-      debug:
-        msg: |
-          Raw stdout: {{ db_query_result.stdout }}
-          Return code: {{ db_query_result.rc }}
-
     - name: Set hosts data
       set_fact:
         hosts_data: "{{ db_query_result.stdout | from_json | default([]) }}"
       ignore_errors: yes
 
-    - name: DEBUG - Show hosts_data after parsing
-      debug:
-        msg: |
-          Type: {{ hosts_data | type_debug }}
-          Length: {{ hosts_data | length if hosts_data is iterable else 'not iterable' }}
-          Content: {{ hosts_data }}
+    - name: Convert to list if dict
+      set_fact:
+        hosts_data: "{{ hosts_data if hosts_data is iterable and hosts_data is not string and hosts_data is not mapping else ([hosts_data] if hosts_data else []) }}"
 
     - name: Show queried hosts
       debug:
         msg: "Found {{ hosts_data | length }} hosts from AWX"
 
-    - name: DEBUG - Show detailed hosts data
+    - name: List hosts
       debug:
-        msg: |
-          Hosts data type: {{ hosts_data | type_debug }}
-          Hosts data content: {{ hosts_data }}
-          Grafana URL: {{ grafana_url }}
-          Grafana token length: {{ grafana_token | length }}
-
-    - name: DEBUG - Show first host details
-      debug:
-        msg: |
-          First host: {{ hosts_data[0] | default('NO DATA') }}
-      when: hosts_data | length > 0
+        msg: "- {{ item.name }}"
+      loop: "{{ hosts_data }}"
+      when: 
+        - hosts_data | length > 0
+        - item.name is defined
 
     - name: Push host data to Grafana as annotations
       uri:
@@ -187,12 +155,6 @@
       when: 
         - hosts_data | length > 0
         - grafana_token | length > 0
-      ignore_errors: yes
-
-    - name: Cleanup credentials file
-      file:
-        path: /tmp/pg_creds.conf
-        state: absent
       ignore_errors: yes
 
     - name: Summary
