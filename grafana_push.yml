@@ -174,12 +174,12 @@
         headers:
           Authorization: "Bearer {{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','') }}"
           Content-Type: "application/json"
-          X-Grafana-Org-Id: 1
+         #X-Grafana-Org-Id: 1
         body_format: json
         body:
           dashboardUID: "{{ grafana_dashboard_uid }}"
-          time: "{{ epoch_ms }}"
-          timeEnd: "{{ epoch_ms }}"
+          time: "{{ epoch_ms | int}}"
+          #timeEnd: "{{ epoch_ms | int }}"
           text: "Inventory: {{ AWX_INVENTORY_NAME }}"
           tags:
             - "awx"
