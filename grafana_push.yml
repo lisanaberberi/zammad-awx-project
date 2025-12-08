@@ -218,8 +218,7 @@
             '**Zammad Status:** ' ~ (item_vars.zammad_info.zammad_active | ternary('Active', 'Inactive')) ~ '\n' ~
             '**Redis:** ' ~ (item_vars.redis_info.installed | default('no')) ~ ' (v' ~ (item_vars.redis_info.version | default('-')) ~ ')\n' ~
             '**Elasticsearch:** ' ~ (item_vars.elasticsearch_info.installed | default('no')) ~ ' (v' ~ (item_vars.elasticsearch_info.version | default('-')) ~ ')\n' ~
-            '**KIT Packages:** ' ~ (
-              (item_vars.zammad_info.kit_packages | default('') | regex_replace('^\s+|\s+
+            '**KIT Packages:** ' ~ (item_vars.zammad_info.kit_packages | default('None')) ~ '\n' ~
             '**Last Updated:** ' ~ (item_vars.zammad_info.last_updated | default('N/A'))
           ),
           'time': ((lookup('pipe', 'date +%s') | int) * 1000)
