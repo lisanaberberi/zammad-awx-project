@@ -174,13 +174,16 @@
         headers:
           Authorization: "Bearer {{ grafana_token | trim }}"
           Content-Type: "application/json"
-        body: |
-          {
-            "dashboardUID": "{{ grafana_dashboard_uid }}",
-            "time": {{ epoch_ms | int }},
-            "text": "AWX Inventory Sync: {{ awx_inventory_name }} - {{ parsed_hosts | length }} hosts",
-            "tags": ["awx", "awx_inventory", "{{ awx_inventory_name }}"]
-          }
+
+        body_format: json
+        body:
+          dashboardUID: "{{ grafana_dashboard_uid }}"
+          time: "{{ epoch_ms | int }}"
+          text: "AWX Inventory Sync: {{ awx_inventory_name }} "
+          tags:
+            - "awx"
+            - "awx_inventory"
+            - "{{ awx_inventory_name }}"
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
