@@ -201,32 +201,28 @@
     # Build per-host payload (string-safe). We’ll coerce 'time' to int when sending.
     - name: Build per-host annotation payloads
       set_fact:
-        grafana_host_payloads: >-
-          {{
-            (grafana_host_payloads | default([])) +
-            [{
-              'dashboardUID': grafana_dashboard_uid,  # optional; omit for global annotations
-              'tags': ['awx_inventory', awx_inventory_name, item.name],
-              'text': (
-                '**Host:** ' ~ item.name ~ '\n' ~
-                '**ID:** ' ~ (item.id | string) ~ '\n' ~
-                (
-                  item.vars.zammad_info is defined
-                  | ternary(
-                      '**Zammad Version:** ' ~ (item.vars.zammad_info.zammad_version | default('N/A')) ~ '\n' ~
-                      '**RAM:** ' ~ (item.vars.zammad_info.ram_gb | default('N/A') | string) ~ ' GB\n' ~
-                      '**OS:** ' ~ (item.vars.zammad_info.os | default('N/A')) ~ '\n' ~
-                      '**Status:** ' ~ (
-                        (item.vars.zammad_info.zammad_active | default(false))
-                        | ternary('Active', 'Inactive')
-                      ),
-                      'No Zammad info available'
-                    )
+        grafana_host_payloads: "{{ (grafana_host_payloads | default([])) + [{
+          'dashboardUID': grafana_dashboard_uid,
+          'tags': ['awx_inventory', awx_inventory_name, item.name],
+          'text': (
+            '**Host:** ' ~ item.name ~ '\n' ~
+            '**ID:** ' ~ (item.id | string) ~ '\n' ~
+            (
+              item.vars.zammad_info is defined
+              | ternary(
+                  '**Zammad Version:** ' ~ (item.vars.zammad_info.zammad_version | default('N/A')) ~ '\n' ~
+                  '**RAM:** ' ~ (item.vars.zammad_info.ram_gb | default('N/A') | string) ~ ' GB\n' ~
+                  '**OS:** ' ~ (item.vars.zammad_info.os | default('N/A')) ~ '\n' ~
+                  '**Status:** ' ~ (
+                    (item.vars.zammad_info.zammad_active | default(false))
+                    | ternary('Active', 'Inactive')
+                  ),
+                  'No Zammad info available'
                 )
-              ),
-              'time': ((lookup('pipe', 'date +%s') | int) * 1000)
-            }]
-          }}
+            )
+          ),
+          'time': ((lookup('pipe', 'date +%s') | int) * 1000)
+        }] }}"
       loop: "{{ parsed_hosts }}"
       loop_control:
         label: "{{ item.name }}"
@@ -314,82 +310,3 @@
 
 
     
-    
-    # - name: Push each host to Grafana annotations
-    #   uri:
-    #     url: "{{ grafana_url }}/api/annotations"
-    #     method: POST
-    #     headers:
-    #       Authorization: "Bearer {{ grafana_token }}"
-    #       Content-Type: "application/json"
-    #     body_format: json
-    #     body:
-    #       tags:
-    #         - "awx_inventory"
-    #         - "{{ awx_inventory_name }}"
-    #         - "{{ item.name }}"
-    #       text: |
-    #         **Host:** {{ item.name }}
-    #         **ID:** {{ item.id }}
-    #         {% if item.vars.zammad_info is defined %}
-    #         **Zammad Version:** {{ item.vars.zammad_info.zammad_version | default('N/A') }}
-    #         **RAM:** {{ item.vars.zammad_info.ram_gb | default('N/A') }} GB
-    #         **OS:** {{ item.vars.zammad_info.os | default('N/A') }}
-    #         **Status:** {{ 'Active' if item.vars.zammad_info.zammad_active | default(false) else 'Inactive' }}
-    #         {% else %}
-    #         No Zammad info available
-    #         {% endif %}
-    #       time: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
-    #     validate_certs: no
-    #     status_code: [200, 204]
-    #   loop: "{{ parsed_hosts }}"
-    #   loop_control:
-    #     label: "{{ item.name }}"
-    #   register: grafana_push_result
-    #   failed_when: false
-      
-
-    # - name: Report failed pushes
-    #   debug:
-    #     msg: "Failed to push {{ item.item.name }}: {{ item.msg | default('Unknown error') }}"
-    #   loop: "{{ grafana_push_result.results }}"
-    #   loop_control:
-    #     label: "{{ item.item.name }}"
-    #   when: item.failed | default(false)
-
-    # - name: Push inventory summary to Grafana
-    #   uri:
-    #     url: "{{ grafana_url }}/api/annotations"
-    #     method: POST
-    #     headers:
-    #       Authorization: "Bearer {{ grafana_token }}"
-    #       Content-Type: "application/json"
-    #     body_format: json
-    #     body:
-    #       tags:
-    #         - "awx_inventory_sync"
-    #         - "{{ awx_inventory_name }}"
-    #       text: |
-    #         **Inventory Sync Complete**
-    #         Inventory: {{ awx_inventory_name }}
-    #         Total Hosts: {{ parsed_hosts | length }}
-    #         Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
-    #         Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
-    #       time: "{{ (lookup('pipe', 'date +%s') | int) * 1000 }}"
-
-    #     validate_certs: no
-    #     status_code: [200, 204]
-    #   when: parsed_hosts | length > 0
-
-    # - name: Final Summary
-    #   debug:
-    #     msg: |
-    #       ========================================
-    #       AWX → Grafana Sync Complete
-    #       Inventory: {{ awx_inventory_name }}
-    #       Total Hosts: {{ parsed_hosts | length }}
-    #       Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
-    #       Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
-    #       Grafana URL: {{ grafana_url }}
-    #       Timestamp: {{ (now() | to_datetime).isoformat() }}
-    #       ========================================
