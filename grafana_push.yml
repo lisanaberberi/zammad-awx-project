@@ -219,21 +219,16 @@
             '**Redis:** ' ~ (item_vars.redis_info.installed | default('no')) ~ ' (v' ~ (item_vars.redis_info.version | default('-')) ~ ')\n' ~
             '**Elasticsearch:** ' ~ (item_vars.elasticsearch_info.installed | default('no')) ~ ' (v' ~ (item_vars.elasticsearch_info.version | default('-')) ~ ')\n' ~
             '**KIT Packages:** ' ~ (
-              (item_vars.zammad_info.kit_packages | default('')) != ''
-              | ternary(
-                  (item_vars.zammad_info.kit_packages | regex_replace('^\s+|\s+$', '')),
-                  'None'
-                )
-            ) ~ '\n' ~
+              (item_vars.zammad_info.kit_packages | default('') | regex_replace('^\s+|\s+
             '**Last Updated:** ' ~ (item_vars.zammad_info.last_updated | default('N/A'))
           ),
           'time': ((lookup('pipe', 'date +%s') | int) * 1000)
         }] }}"
-      vars:
-        item_vars: "{{ item.variables | from_json }}"
-      loop: "{{ parsed_hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
+        vars:
+          item_vars: "{{ item.variables | from_json }}"
+        loop: "{{ parsed_hosts }}"
+        loop_control:
+          label: "{{ item.name }}"
 
     # Optional: sanity check the first payload to confirm types before sending
     - name: Sanity check a sample host payload (debug)
