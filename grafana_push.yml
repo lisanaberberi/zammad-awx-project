@@ -174,7 +174,7 @@
     - name: Force 'time' to int inside the dict
       set_fact:
         grafana_annotation_body: >-
-      {{ grafana_annotation_body | combine({'time': (grafana_annotation_body.time | int)}) }}
+            {{ grafana_annotation_body | combine({'time': (grafana_annotation_body.time | int)}) }}
 
     - name: Create annotation (dashboard-scoped)
       uri:
@@ -183,8 +183,11 @@
         headers:
           Authorization: "Bearer {{ grafana_token | trim }}"
           Content-Type: "application/json"
-        body_format: json
-        body: "{{ grafana_annotation_body }}"   # ← send the dict you built & verified
+        body_format: json        
+        body: >-
+          {{ grafana_annotation_body
+            | combine({'time': (grafana_annotation_body.time | int)}) }}
+
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
