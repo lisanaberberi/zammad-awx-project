@@ -169,21 +169,18 @@
     # 3) POST to /api/annotations
     - name: Create annotation (dashboard-scoped)
       uri:
-        url: "{{ GRAFANA_URL }}/api/annotations"
+        url: "{{ grafana_url }}/api/annotations"
         method: POST
         headers:
-          Authorization: "Bearer {{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','') }}"
+          Authorization: "Bearer {{ grafana_token | trim }}"
           Content-Type: "application/json"
-         #X-Grafana-Org-Id: 1
-        body:
-          dashboardUID: "{{ grafana_dashboard_uid }}"
-          time: "{{ epoch_ms | int}}"
-          #timeEnd: "{{ epoch_ms | int }}"
-          text: "Inventory: {{ AWX_INVENTORY_NAME }}"
-          tags:
-            - "awx"
-            - "awx_inventory"
-            - "{{ awx_inventory_name }}"
+        body: |
+          {
+            "dashboardUID": "{{ grafana_dashboard_uid }}",
+            "time": {{ epoch_ms | int }},
+            "text": "AWX Inventory Sync: {{ awx_inventory_name }} - {{ parsed_hosts | length }} hosts",
+            "tags": ["awx", "awx_inventory", "{{ awx_inventory_name }}"]
+          }
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
