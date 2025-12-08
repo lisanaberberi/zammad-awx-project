@@ -185,9 +185,6 @@
             - "awx"
             - "awx_inventory"
             - "{{ awx_inventory_name }}"
-          data:
-            total_hosts: "{{ parsed_hosts | length }}"
-
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
