@@ -264,38 +264,6 @@
         label: "{{ item.item.tags[2] | default('host') }}"
       when: item.failed | default(false)
 
-    # Summary (optional)
-    - name: Push inventory summary to Grafana (hard-coerce time)
-      uri:
-        url: "{{ grafana_url }}/api/annotations"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ grafana_token | trim }}"
-          Content-Type: "application/json"
-        body_format: json
-        body: >-
-          {{
-            {
-              'dashboardUID': grafana_dashboard_uid,  # optional; remove if you want global annotation
-              'tags': ['awx_inventory_sync', awx_inventory_name],
-              'text':
-                '**Inventory Sync Complete**\n' ~
-                'Inventory: ' ~ awx_inventory_name ~ '\n' ~
-                'Total Hosts: ' ~ (parsed_hosts | length | string) ~ '\n' ~
-                'Successfully Pushed: ' ~ (
-                  (grafana_push_result.results | selectattr('failed','undefined') | list | length) | string
-                ) ~ '\n' ~
-                'Failed: ' ~ (
-                  (grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length) | string
-                ),
-              'time': ((lookup('pipe', 'date +%s') | int) * 1000)
-            } | combine({'time': (((lookup('pipe', 'date +%s') | int) * 1000) | int) })
-          }}
-        validate_certs: no
-        status_code: [200, 201, 202, 204]
-        return_content: yes
-      when: parsed_hosts | length > 0
-
     - name: Final Summary
       debug:
         msg: |
