@@ -274,7 +274,7 @@
           Successfully Pushed: {{ grafana_push_result.results | selectattr('failed','undefined') | list | length }}
           Failed: {{ grafana_push_result.results | selectattr('failed','defined') | selectattr('failed') | list | length }}
           Grafana URL: {{ grafana_url }}
-          Timestamp: {{ (now() | to_datetime).isoformat() }}
+          Timestamp: {{ now(utc=True).isoformat() }}
 
 
     
