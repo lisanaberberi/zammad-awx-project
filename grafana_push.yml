@@ -22,6 +22,7 @@
       set_fact:
         grafana_url: "{{ GRAFANA_URL }}"
         grafana_token: "{{ GRAFANA_TOKEN | trim | replace('\n','') | replace('\r','')}}"     
+        grafana_dashboard_uid: "adcqlkp"   # change to your dashboard's UID
 
     # -----------------------------
     # 2️⃣ Validate required environment variables
