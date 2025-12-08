@@ -151,22 +151,26 @@
     # Expect: type=int
 
     # 2) Build a dashboard-scoped annotation body using the UID (NOT numeric ID)
+
+    # Build the annotation payload once (use the same variables everywhere)
     - name: Build annotation body (dashboard-scoped)
       set_fact:
         grafana_annotation_body:
-          dashboardUID: "adcqlkp"        # change to your dashboard's UID
-          time: "{{ epoch_ms }}"          # stays integer inside the dict
-          text: "AWX Inventory Sync — {{ AWX_INVENTORY_NAME }}"
+          dashboardUID: "{{ grafana_dashboard_uid }}"           # use one source of truth
+          time: "{{ epoch_ms | int }}"                          # ensure int inside the dict
+          text: "AWX Inventory Sync — {{ awx_inventory_name }}" # keep casing consistent
           tags:
             - awx
-            - "{{ AWX_INVENTORY_NAME }}"
+            - awx_inventory
+            - "{{ awx_inventory_name }}"
 
     - name: Sanity check body types
       debug:
-        msg: "time={{ grafana_annotation_body.time }} type={{ grafana_annotation_body.time | type_debug }}"
-    # Expect: type=int
+        msg:
+          - "time={{ grafana_annotation_body.time }} type={{ grafana_annotation_body.time | type_debug }}"
+          - "body_json={{ grafana_annotation_body | to_nice_json }}"
+    # Expect: type=int and the printed JSON shows time without quotes
 
-    # 3) POST to /api/annotations
     - name: Create annotation (dashboard-scoped)
       uri:
         url: "{{ grafana_url }}/api/annotations"
@@ -174,16 +178,8 @@
         headers:
           Authorization: "Bearer {{ grafana_token | trim }}"
           Content-Type: "application/json"
-
         body_format: json
-        body:
-          dashboardUID: "{{ grafana_dashboard_uid }}"
-          time: "{{ epoch_ms | int }}"
-          text: "AWX Inventory Sync: {{ awx_inventory_name }} "
-          tags:
-            - "awx"
-            - "awx_inventory"
-            - "{{ awx_inventory_name }}"
+        body: "{{ grafana_annotation_body }}"   # ← send the dict you built & verified
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
@@ -191,6 +187,7 @@
 
     - debug:
         msg: "Status={{ grafana_annotation_push.status }} Content={{ grafana_annotation_push.content | default('') }}"
+
 
 
     
