@@ -151,8 +151,6 @@
     # Expect: type=int
 
     # 2) Build a dashboard-scoped annotation body using the UID (NOT numeric ID)
-
-    # Build the annotation payload once (use the same variables everywhere)
     - name: Build annotation body (dashboard-scoped)
       set_fact:
         grafana_annotation_body:
@@ -170,6 +168,13 @@
           - "time={{ grafana_annotation_body.time }} type={{ grafana_annotation_body.time | type_debug }}"
           - "body_json={{ grafana_annotation_body | to_nice_json }}"
     # Expect: type=int and the printed JSON shows time without quotes
+
+
+    # Hard-constrains once more (works reliably)
+    - name: Force 'time' to int inside the dict
+      set_fact:
+        grafana_annotation_body: >-
+      {{ grafana_annotation_body | combine({'time': (grafana_annotation_body.time | int)}) }}
 
     - name: Create annotation (dashboard-scoped)
       uri:
