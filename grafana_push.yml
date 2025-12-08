@@ -175,7 +175,20 @@
           Content-Type: "application/json"
           X-Grafana-Org-Id: 1
         body_format: json
-        body: "{{ grafana_annotation_body }}"
+        body:
+          dashboardUID: "{{ grafana_dashboard_uid }}"
+          time: "{{ epoch_ms }}"
+          timeEnd: "{{ epoch_ms }}"
+          text: "Host: {{ item.name }}"
+          tags:
+            - "awx"
+            - "awx_inventory"
+            - "{{ awx_inventory_name }}"
+            - "{{ item.name }}"
+          data:
+            host_id: "{{ item.id }}"
+            host_name: "{{ item.name }}"
+            host_vars: "{{ item.vars | to_json }}"
         validate_certs: no
         status_code: [200, 201, 202, 204]
         return_content: yes
