@@ -102,7 +102,7 @@
           {% endfor %}
 
     - name: Send alert email - Unreachable hosts detected
-      community.general.mail:
+      ansible.builtin.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
         username: "{{ smtp_username }}"
