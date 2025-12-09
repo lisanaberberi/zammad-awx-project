@@ -1,0 +1,166 @@
+---
+# ======================================
+# Host Reachability Monitoring Playbook
+# ======================================
+# This playbook checks if all hosts in the zammad_servers group are reachable
+# and sends email alerts via KIT SMTP server (smtp.kit.edu).
+# 
+# Run every 2 hours via CronJob or AWX schedule
+# ======================================
+
+- name: Host Reachability Monitoring and Alerting
+  hosts: localhost
+  gather_facts: yes
+  connection: local
+  become: no
+  
+  vars:
+    # SMTP Configuration (KIT Mail Server)
+    # Use smtp.kit.edu for authenticated submission
+    # Use smarthost.kit.edu for unauthenticated from KIT network (no auth needed)
+    smtp_host: "{{ smtp_host | default('smtp.kit.edu') }}"
+    smtp_port: "{{ smtp_port | default(587) }}"
+    smtp_username: "{{ smtp_username | default('') }}"  # e.g., ab1234
+    smtp_password: "{{ smtp_password | default('') }}"
+    smtp_use_tls: "{{ smtp_use_tls | default(true) }}"
+    
+    # Email Configuration
+    email_from: "{{ email_from | default('zammad-monitoring@kit.edu') }}"
+    alert_recipients: "{{ alert_recipients | default(['ops-team@kit.edu']) }}"
+    
+    # Monitoring Configuration
+    check_port: "{{ check_port | default(22) }}"
+    check_timeout: "{{ check_timeout | default(5) }}"
+    alert_on_unreachable: "{{ alert_on_unreachable | default(true) }}"
+    
+    # Report settings
+    report_dir: "{{ report_dir | default('/runner/artifacts') }}"
+    
+  tasks:
+    - name: Create artifacts directory
+      file:
+        path: "{{ report_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Initialize reachability report
+      set_fact:
+        host_reachability:
+          timestamp: "{{ now(utc=True).isoformat() }}"
+          check_port: "{{ check_port }}"
+          reachable_hosts: []
+          unreachable_hosts: []
+          total_checked: "{{ groups['zammad_servers'] | length }}"
+
+    - name: Debug - Show hosts to check
+      debug:
+        msg: "Checking reachability for hosts: {{ groups['zammad_servers'] }}"
+
+    - name: Check connectivity to all Zammad hosts
+      wait_for:
+        host: "{{ hostvars[item].ansible_host | default(item) }}"
+        port: "{{ check_port }}"
+        timeout: "{{ check_timeout }}"
+        state: started
+      loop: "{{ groups['zammad_servers'] }}"
+      register: reachability_check
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Parse reachability results
+      set_fact:
+        host_reachability: >-
+          {{
+            host_reachability | combine({
+              'reachable_hosts': host_reachability.reachable_hosts + [item.item],
+              'unreachable_hosts': host_reachability.unreachable_hosts + ([] if item is succeeded else [item.item])
+            })
+          }}
+      loop: "{{ reachability_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Display reachability summary
+      debug:
+        msg: |
+          =========================
+          Reachability Check Summary
+          =========================
+          Timestamp: {{ host_reachability.timestamp }}
+          Total Hosts: {{ host_reachability.total_checked }}
+          Reachable: {{ host_reachability.reachable_hosts | length }}
+          Unreachable: {{ host_reachability.unreachable_hosts | length }}
+          
+          Reachable Hosts:
+          {% for host in host_reachability.reachable_hosts %}
+          - {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          {% endfor %}
+          
+          Unreachable Hosts:
+          {% for host in host_reachability.unreachable_hosts %}
+          - {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          {% endfor %}
+
+    - name: Send alert email - Unreachable hosts detected
+      community.general.mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        username: "{{ smtp_username }}"
+        password: "{{ smtp_password }}"
+        secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+        from_addr: "{{ email_from }}"
+        to_addr: "{{ alert_recipients }}"
+        subject: "🚨 ALERT: {{ host_reachability.unreachable_hosts | length }} host(s) unreachable - {{ host_reachability.timestamp }}"
+        body: |
+          HOST REACHABILITY ALERT
+          =======================
+          
+          Timestamp: {{ host_reachability.timestamp }}
+          
+          STATUS: UNREACHABLE HOSTS DETECTED
+          
+          {{ host_reachability.unreachable_hosts | length }} out of {{ host_reachability.total_checked }} hosts are currently unreachable.
+          
+          UNREACHABLE HOSTS:
+          {% for host in host_reachability.unreachable_hosts | sort %}
+          • {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          {% endfor %}
+          
+          REACHABLE HOSTS:
+          {% for host in host_reachability.reachable_hosts | sort %}
+          • {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          {% endfor %}
+          
+          SUMMARY:
+          - Total Hosts: {{ host_reachability.total_checked }}
+          - Reachable: {{ host_reachability.reachable_hosts | length }}
+          - Unreachable: {{ host_reachability.unreachable_hosts | length }}
+          - Check Method: SSH Port {{ host_reachability.check_port }}
+          
+          Please investigate the unreachable hosts immediately.
+          
+          Regards,
+          Automated Monitoring System
+      when:
+        - alert_on_unreachable | bool
+        - host_reachability.unreachable_hosts | length > 0
+      ignore_errors: yes
+
+    - name: Set play result
+      set_fact:
+        monitoring_result:
+          status: "{% if host_reachability.unreachable_hosts | length == 0 %}success{% else %}warning{% endif %}"
+          unreachable_count: "{{ host_reachability.unreachable_hosts | length }}"
+          reachable_count: "{{ host_reachability.reachable_hosts | length }}"
+
+    - name: Final summary
+      debug:
+        msg: |
+          ===== MONITORING COMPLETE =====
+          Status: {{ monitoring_result.status | upper }}
+          Reachable: {{ monitoring_result.reachable_count }}
+          Unreachable: {{ monitoring_result.unreachable_count }}
+          
+          Reports saved to: {{ report_dir }}
+          Emails sent via KIT SMTP ({{ smtp_host }}:{{ smtp_port }})
+          ===============================
