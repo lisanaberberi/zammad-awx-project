@@ -88,6 +88,7 @@
     # ================================
     # TASK 1: CHECK HOST REACHABILITY
     # ================================
+
     - name: Check connectivity to all hosts
       wait_for:
         host: "{{ hostvars[item].ansible_host | default(item) }}"
@@ -121,7 +122,6 @@
       loop: "{{ reachability_check.results }}"
       loop_control:
         label: "{{ item.item }}"
-
 
     # ================================
     # TASK 2: CHECK DISK SPACE
