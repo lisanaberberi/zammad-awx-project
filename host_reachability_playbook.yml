@@ -25,8 +25,8 @@
     
     # Email Configuration
     email_from: "{{ smtp_username }}@kit.edu"  # Use authenticated user's email
-    alert_recipients: ["ops-team@kit.edu"]
-    test_email_recipient: "your-email@kit.edu"  # Change this to your email for testing
+    alert_recipients: ["{{ smtp_username }}@kit.edu"]  # Change to desired alert recipients
+    test_email_recipient: "lisana.berberi@kit.edu"  # Change this to your email for testing
     
     # Monitoring Configuration
     check_port: 22
