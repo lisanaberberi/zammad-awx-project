@@ -201,13 +201,11 @@
 
     - name: Parse certificate expiry results
       set_fact:
-        cert_expiry_data: >-
-          {{ cert_expiry_data | combine({
-            item.item: {
-              'expiry_output': item.stdout_lines | default([]),
-              'raw_output': item.stdout | default('')
-            }
-          }) }}
+        cert_details: "{{ cert_details | default({}) }}"
+
+    - name: Build certificate details for each host
+      set_fact:
+        cert_details: "{{ cert_details | combine({item.item | string: {'output': item.stdout_lines | default([]), 'raw': item.stdout | default('')}}) }}"
       loop: "{{ cert_expiry_check.results }}"
       loop_control:
         label: "{{ item.item }}"
