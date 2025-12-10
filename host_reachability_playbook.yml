@@ -15,15 +15,16 @@
   become: no
   
   vars:
-    # SMTP Configuration - from KIT SMTP Auth credential type
-    smtp_host: "{{ smtp_host }}"
-    smtp_port: "{{ smtp_port }}"
-    smtp_username: "{{ smtp_username }}"
-    smtp_password: "{{ smtp_password }}"
-    smtp_use_tls: true
+    # SMTP Configuration - Use smarthost.kit.edu (no auth needed from KIT network)
+    # OR use smtp.kit.edu with authentication
+    smtp_host: "{{ smtp_host | default('smarthost.kit.edu') }}"
+    smtp_port: "{{ smtp_port | default(25) }}"
+    smtp_username: "{{ smtp_username | default('') }}"
+    smtp_password: "{{ smtp_password | default('') }}"
+    smtp_use_tls: "{{ smtp_use_tls | default(false) }}"
     
     # Email Configuration
-    email_from: "zammad-monitoring@kit.edu"
+    email_from: "{{ smtp_username }}@kit.edu"  # Use authenticated user's email
     alert_recipients: ["ops-team@kit.edu"]
     test_email_recipient: "your-email@kit.edu"  # Change this to your email for testing
     
@@ -129,8 +130,8 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        username: "{{ smtp_username }}"
-        password: "{{ smtp_password }}"
+        username: "{{ smtp_username if smtp_username else omit }}"
+        password: "{{ smtp_password if smtp_password else omit }}"
         secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
@@ -178,8 +179,8 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        username: "{{ smtp_username }}"
-        password: "{{ smtp_password }}"
+        username: "{{ smtp_username if smtp_username else omit }}"
+        password: "{{ smtp_password if smtp_password else omit }}"
         secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
         from: "{{ email_from }}"
         to: ["{{ test_email_recipient }}"]
