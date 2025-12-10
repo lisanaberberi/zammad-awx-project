@@ -235,43 +235,43 @@
         secure: "never"
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
-        subject: "🚨 ALERT: {{ host_reachability.unreachable_hosts | length }} host(s) unreachable - {{ host_reachability.timestamp }}"
+        subject: "🚨 ALERT: {{ monitoring_report.unreachable_hosts | length }} host(s) unreachable - {{ monitoring_report.timestamp }}"
         body: |
           HOST REACHABILITY ALERT
           =======================
           
-          Timestamp: {{ host_reachability.timestamp }}
+          Timestamp: {{ monitoring_report.timestamp }}
           
           STATUS: UNREACHABLE HOSTS DETECTED
           
-          {{ host_reachability.unreachable_hosts | length }} out of {{ host_reachability.total_checked }} hosts are currently unreachable.
+          {{ monitoring_report.unreachable_hosts | length }} out of {{ monitoring_report.total_checked }} hosts are currently unreachable.
           
           UNREACHABLE HOSTS:
-          {% for host in host_reachability.unreachable_hosts | sort %}
-          • {{ host }} ({{ host_reachability.hosts_detail[host].ip }})
-            State: {{ host_reachability.hosts_detail[host].state }}
-            Owner: {{ host_reachability.hosts_detail[host].owner }}
+          {% for host in monitoring_report.unreachable_hosts | sort %}
+          • {{ host }} ({{ monitoring_report.hosts_detail[host].ip }})
+            State: {{ monitoring_report.hosts_detail[host].state }}
+            Owner: {{ monitoring_report.hosts_detail[host].owner }}
           {% endfor %}
           
           REACHABLE HOSTS:
-          {% for host in host_reachability.reachable_hosts | sort %}
-          • {{ host }} ({{ host_reachability.hosts_detail[host].ip }})
-            State: {{ host_reachability.hosts_detail[host].state }}
-            Owner: {{ host_reachability.hosts_detail[host].owner }}
+          {% for host in monitoring_report.reachable_hosts | sort %}
+          • {{ host }} ({{ monitoring_report.hosts_detail[host].ip }})
+            State: {{ monitoring_report.hosts_detail[host].state }}
+            Owner: {{ monitoring_report.hosts_detail[host].owner }}
           {% endfor %}
           
           SUMMARY:
-          - Total Hosts: {{ host_reachability.total_checked }}
-          - Reachable: {{ host_reachability.reachable_hosts | length }}
-          - Unreachable: {{ host_reachability.unreachable_hosts | length }}
-          - Check Method: SSH Port {{ host_reachability.check_port }}
+          - Total Hosts: {{ monitoring_report.total_checked }}
+          - Reachable: {{ monitoring_report.reachable_hosts | length }}
+          - Unreachable: {{ monitoring_report.unreachable_hosts | length }}
+          - Check Method: SSH Port {{ monitoring_report.check_port }}
           
           Please investigate the unreachable hosts immediately.
           
           Regards,
           Automated Monitoring System
       when:
-        - host_reachability.unreachable_hosts | length > 0
+        - monitoring_report.unreachable_hosts | length > 0
       ignore_errors: yes
 
     - name: Send test email - For verification (optional)
@@ -281,14 +281,14 @@
         secure: "never"
         from: "{{ email_from }}"
         to: ["{{ test_email_recipient }}"]
-        subject: "Test: Host Monitoring System - {{ host_reachability.timestamp }}"
+        subject: "Test: Host Monitoring System - {{ monitoring_report.timestamp }}"
         body: |
           This is a test email from the Host Monitoring System.
           
-          All {{ host_reachability.total_checked }} hosts are currently reachable:
+          All {{ monitoring_report.total_checked }} hosts are currently reachable:
           
-          {% for host in host_reachability.reachable_hosts | sort %}
-          ✓ {{ host }} ({{ host_reachability.hosts_detail[host].ip }})
+          {% for host in monitoring_report.reachable_hosts | sort %}
+          ✓ {{ host }} ({{ monitoring_report.hosts_detail[host].ip }})
           {% endfor %}
           
           If you received this email, the monitoring system is working correctly.
@@ -300,9 +300,9 @@
     - name: Set play result
       set_fact:
         monitoring_result:
-          status: "{% if host_reachability.unreachable_hosts | length == 0 %}success{% else %}warning{% endif %}"
-          unreachable_count: "{{ host_reachability.unreachable_hosts | length }}"
-          reachable_count: "{{ host_reachability.reachable_hosts | length }}"
+          status: "{% if monitoring_report.unreachable_hosts | length == 0 %}success{% else %}warning{% endif %}"
+          unreachable_count: "{{ monitoring_report.unreachable_hosts | length }}"
+          reachable_count: "{{ monitoring_report.reachable_hosts | length }}"
 
 
     - name: Send alert email - High disk usage detected
