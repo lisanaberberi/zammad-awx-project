@@ -32,6 +32,15 @@
     check_port: 22
     check_timeout: 5
     alert_on_unreachable: true
+
+        # Disk monitoring configuration
+    disk_usage_threshold: 95  # Alert if usage > 95%
+    
+    # Certificate monitoring configuration
+    cert_expiry_warning_days: 30  # Alert if expires in < 30 days
+    cert_paths:  # Paths to check for SSL certificates
+      - "/etc/ssl/certs"
+      - "/etc/letsencrypt/live"
     
     # Report settings
     report_dir: "/runner/artifacts"
@@ -65,6 +74,9 @@
           total_checked: "{{ groups['zammad_servers'] | length }}"
           hosts_detail: {}
 
+    # ================================
+    # TASK 1: CHECK HOST REACHABILITY
+    # ================================
     - name: Check connectivity to all hosts
       wait_for:
         host: "{{ hostvars[item].ansible_host | default(item) }}"
@@ -126,6 +138,115 @@
           {% endfor %}
           {% endif %}
 
+
+
+    # ================================
+    # TASK 2: CHECK DISK SPACE
+    # ================================
+    - name: Check disk space on reachable hosts
+      shell: |
+        df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+      register: disk_usage_check
+      loop: "{{ monitoring_report.reachability.reachable_hosts }}"
+      loop_control:
+        label: "{{ item }}"
+      delegate_to: "{{ item }}"
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Parse disk space results
+      set_fact:
+        monitoring_report: >-
+          {{
+            monitoring_report | combine({
+              'disk_space': monitoring_report.disk_space | combine({
+                'checked_hosts': monitoring_report.disk_space.checked_hosts + [item.item],
+                'high_usage_hosts': monitoring_report.disk_space.high_usage_hosts + ([] if (item.stdout | int(0) <= disk_usage_threshold) else [item.item]),
+                'hosts_detail': monitoring_report.disk_space.hosts_detail | combine({
+                  item.item: {
+                    'usage_percent': item.stdout | int(0),
+                    'threshold': disk_usage_threshold,
+                    'alert': (item.stdout | int(0) > disk_usage_threshold)
+                  }
+                })
+              })
+            })
+          }}
+      loop: "{{ disk_usage_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item is not skipped
+
+    # ================================
+    # TASK 3: CHECK CERTIFICATE EXPIRY
+    # ================================
+    - name: Find certificate files on reachable hosts
+      find:
+        paths: "{{ cert_paths }}"
+        patterns: "*.crt,*.pem"
+        file_type: file
+      register: cert_files_check
+      loop: "{{ monitoring_report.reachability.reachable_hosts }}"
+      loop_control:
+        label: "{{ item }}"
+      delegate_to: "{{ item }}"
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Check certificate expiry dates
+      shell: |
+        {% set certs = item.files | default([]) %}
+        {% if certs | length > 0 %}
+        {% for cert in certs %}
+        openssl x509 -in "{{ cert.path }}" -noout -enddate 2>/dev/null || true
+        {% endfor %}
+        {% endif %}
+      register: cert_expiry_check
+      loop: "{{ cert_files_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      delegate_to: "{{ item.item }}"
+      ignore_errors: yes
+      changed_when: false
+      when: item is not skipped
+
+    - name: Parse certificate expiry results
+      set_fact:
+        cert_expiry_data: "{{ cert_expiry_data | default({}) | combine({
+          item.item: {
+            'expiry_output': item.stdout_lines | default([]),
+            'has_certs': (item.stdout_lines | length) > 0
+          }
+        }) }}"
+      loop: "{{ cert_expiry_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: item is not skipped
+
+    - name: Process certificate expiry dates
+      set_fact:
+        cert_info: "{{ lookup('template', 'cert_expiry_parser.j2') }}"
+      ignore_errors: yes
+
+    - name: Update monitoring report with certificate data
+      set_fact:
+        monitoring_report: >-
+          {{
+            monitoring_report | combine({
+              'certificates': {
+                'checked_hosts': monitoring_report.reachability.reachable_hosts,
+                'expiring_soon': cert_info.expiring_soon | default([]),
+                'expired': cert_info.expired | default([]),
+                'hosts_detail': cert_info.hosts_detail | default({})
+              }
+            }, recursive=True)
+          }}
+      when: cert_info is defined
+
+
+    # ================================
+    # ALERTING SECTION
+    # ================================
     - name: Send alert email - Unreachable hosts detected
       community.general.mail:
         host: "{{ smtp_host }}"
@@ -202,14 +323,105 @@
           unreachable_count: "{{ host_reachability.unreachable_hosts | length }}"
           reachable_count: "{{ host_reachability.reachable_hosts | length }}"
 
-    - name: Final summary
+
+    - name: Send alert email - High disk usage detected
+      community.general.mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        secure: "never"
+        from: "{{ email_from }}"
+        to: "{{ alert_recipients }}"
+        subject: "⚠️ ALERT: {{ monitoring_report.disk_space.high_usage_hosts | length }} host(s) with high disk usage (>{{ disk_usage_threshold }}%) - {{ monitoring_report.timestamp }}"
+        body: |
+          DISK SPACE ALERT
+          ================
+          
+          Timestamp: {{ monitoring_report.timestamp }}
+          
+          STATUS: HIGH DISK USAGE DETECTED
+          
+          {{ monitoring_report.disk_space.high_usage_hosts | length }} host(s) have disk usage exceeding {{ disk_usage_threshold }}%.
+          
+          HOSTS WITH HIGH DISK USAGE:
+          {% for host in monitoring_report.disk_space.high_usage_hosts | sort %}
+          • {{ host }}
+            Current Usage: {{ monitoring_report.disk_space.hosts_detail[host].usage_percent }}%
+            Threshold: {{ disk_usage_threshold }}%
+            IP: {{ monitoring_report.reachability.hosts_detail[host].ip }}
+            Owner: {{ monitoring_report.reachability.hosts_detail[host].owner }}
+          {% endfor %}
+          
+          Please clean up disk space on these hosts.
+          
+          Regards,
+          Automated Monitoring System
+      when:
+        - monitoring_report.disk_space.high_usage_hosts | length > 0
+      ignore_errors: yes
+
+    - name: Send alert email - Certificate expiry warning
+      community.general.mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        secure: "never"
+        from: "{{ email_from }}"
+        to: "{{ alert_recipients }}"
+        subject: "📅 ALERT: Certificates expiring soon or expired - {{ monitoring_report.timestamp }}"
+        body: |
+          CERTIFICATE EXPIRY ALERT
+          ========================
+          
+          Timestamp: {{ monitoring_report.timestamp }}
+          
+          STATUS: CERTIFICATE EXPIRY DETECTED
+          
+          {% if monitoring_report.certificates.expired | length > 0 %}
+          EXPIRED CERTIFICATES:
+          {% for host in monitoring_report.certificates.expired | sort %}
+          • {{ host }}
+            Details: {{ monitoring_report.certificates.hosts_detail[host] | default('N/A') }}
+          {% endfor %}
+          
+          {% endif %}
+          {% if monitoring_report.certificates.expiring_soon | length > 0 %}
+          CERTIFICATES EXPIRING SOON (within {{ cert_expiry_warning_days }} days):
+          {% for host in monitoring_report.certificates.expiring_soon | sort %}
+          • {{ host }}
+            Details: {{ monitoring_report.certificates.hosts_detail[host] | default('N/A') }}
+          {% endfor %}
+          
+          {% endif %}
+          Please renew these certificates immediately.
+          
+          Regards,
+          Automated Monitoring System
+      when:
+        - (monitoring_report.certificates.expired | length > 0) or (monitoring_report.certificates.expiring_soon | length > 0)
+      ignore_errors: yes
+
+    - name: Display comprehensive monitoring summary
       debug:
         msg: |
-          ===== MONITORING COMPLETE =====
-          Status: {{ monitoring_result.status | upper }}
-          Reachable: {{ monitoring_result.reachable_count }}
-          Unreachable: {{ monitoring_result.unreachable_count }}
+          ========================================
+          COMPREHENSIVE MONITORING SUMMARY
+          ========================================
+          Timestamp: {{ monitoring_report.timestamp }}
           
-          Reports saved to: {{ report_dir }}
-          Emails sent via KIT SMTP ({{ smtp_host }}:{{ smtp_port }})
-          ==============================="
+          1. REACHABILITY CHECK
+          --------------------
+          Total Hosts: {{ monitoring_report.reachability.total_checked }}
+          Reachable: {{ monitoring_report.reachability.reachable_hosts | length }}
+          Unreachable: {{ monitoring_report.reachability.unreachable_hosts | length }}
+          
+          2. DISK SPACE CHECK
+          -------------------
+          Hosts Checked: {{ monitoring_report.disk_space.checked_hosts | length }}
+          High Usage (>{{ disk_usage_threshold }}%): {{ monitoring_report.disk_space.high_usage_hosts | length }}
+          
+          3. CERTIFICATE CHECK
+          --------------------
+          Hosts Checked: {{ monitoring_report.certificates.checked_hosts | length }}
+          Expired: {{ monitoring_report.certificates.expired | length }}
+          Expiring Soon (<{{ cert_expiry_warning_days }} days): {{ monitoring_report.certificates.expiring_soon | length }}
+          
+          ========================================
