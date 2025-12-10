@@ -34,7 +34,8 @@
     alert_on_unreachable: "{{ alert_on_unreachable | default(true) }}"
     
     # Report settings
-    report_dir: "{{ report_dir | default('/runner/artifacts') }}"
+    report_dir_default: "/runner/artifacts"
+    report_dir: "{{ report_dir | default(report_dir_default) }}"
     
   tasks:
     - name: Create artifacts directory
