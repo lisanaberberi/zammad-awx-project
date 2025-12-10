@@ -15,21 +15,21 @@
   become: no
   
   vars:
-    # SMTP Configuration (KIT Mail Server)
-    smtp_host: "{{ smtp_host | default('smtp.kit.edu') }}"
-    smtp_port: "{{ smtp_port | default(587) | int }}"
-    smtp_username: "{{ smtp_username | default('') }}"
-    smtp_password: "{{ smtp_password | default('') }}"
-    smtp_use_tls: "{{ smtp_use_tls | default(true) | bool }}"
+    # SMTP Configuration - from KIT SMTP Auth credential type
+    smtp_host: "{{ smtp_host }}"
+    smtp_port: "{{ smtp_port }}"
+    smtp_username: "{{ smtp_username }}"
+    smtp_password: "{{ smtp_password }}"
+    smtp_use_tls: true
     
     # Email Configuration
-    email_from: "{{ email_from | default('zammad-monitoring@kit.edu') }}"
-    alert_recipients: "{{ alert_recipients | default(['ops-team@kit.edu']) }}"
+    email_from: "zammad-monitoring@kit.edu"
+    alert_recipients: ["ops-team@kit.edu"]
     
     # Monitoring Configuration
-    check_port: "{{ check_port | default(22) | int }}"
-    check_timeout: "{{ check_timeout | default(5) | int }}"
-    alert_on_unreachable: "{{ alert_on_unreachable | default(true) | bool }}"
+    check_port: 22
+    check_timeout: 5
+    alert_on_unreachable: true
     
     # Report settings
     report_dir: "/runner/artifacts"
