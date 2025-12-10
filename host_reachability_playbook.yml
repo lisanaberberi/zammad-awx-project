@@ -176,6 +176,25 @@
       ignore_errors: yes
       changed_when: false
 
+    - name: Check certificate expiry dates
+      shell: |
+        {% set certs = item.files | default([]) %}
+        {% if certs | length > 0 %}
+        {% for cert in certs %}
+        echo "FILE:{{ cert.path }}"
+        openssl x509 -in "{{ cert.path }}" -noout -enddate 2>/dev/null || echo "ERROR"
+        {% endfor %}
+        {% else %}
+        echo "NO_CERTS_FOUND"
+        {% endif %}
+      register: cert_expiry_check
+      loop: "{{ cert_files_check.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      delegate_to: "{{ item.item }}"
+      ignore_errors: yes
+      changed_when: false
+
     - name: Initialize certificate data dict
       set_fact:
         cert_expiry_data: {}
