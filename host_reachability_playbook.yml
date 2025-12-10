@@ -193,8 +193,9 @@
           
           Regards,
           Automated Monitoring System
-          
-      ignore_errors: yes    - name: Set play result
+      ignore_errors: yes    
+      
+    - name: Set play result
       set_fact:
         monitoring_result:
           status: "{% if host_reachability.unreachable_hosts | length == 0 %}success{% else %}warning{% endif %}"
