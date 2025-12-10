@@ -16,27 +16,36 @@
   
   vars:
     # SMTP Configuration (KIT Mail Server)
-    # Use smtp.kit.edu for authenticated submission
-    # Use smarthost.kit.edu for unauthenticated from KIT network (no auth needed)
     smtp_host: "{{ smtp_host | default('smtp.kit.edu') }}"
-    smtp_port: "{{ smtp_port | default(587) }}"
-    smtp_username: "{{ smtp_username | default('') }}"  # e.g., ab1234
+    smtp_port: "{{ smtp_port | default(587) | int }}"
+    smtp_username: "{{ smtp_username | default('') }}"
     smtp_password: "{{ smtp_password | default('') }}"
-    smtp_use_tls: "{{ smtp_use_tls | default(true) }}"
+    smtp_use_tls: "{{ smtp_use_tls | default(true) | bool }}"
     
     # Email Configuration
     email_from: "{{ email_from | default('zammad-monitoring@kit.edu') }}"
     alert_recipients: "{{ alert_recipients | default(['ops-team@kit.edu']) }}"
     
     # Monitoring Configuration
-    check_port: "{{ check_port | default(22) }}"
-    check_timeout: "{{ check_timeout | default(5) }}"
-    alert_on_unreachable: "{{ alert_on_unreachable | default(true) }}"
+    check_port: "{{ check_port | default(22) | int }}"
+    check_timeout: "{{ check_timeout | default(5) | int }}"
+    alert_on_unreachable: "{{ alert_on_unreachable | default(true) | bool }}"
     
     # Report settings
-    report_dir_default: "/runner/artifacts"
-    report_dir: "{{ report_dir | default(report_dir_default) }}"
+    report_dir: "/runner/artifacts"
     
+  pre_tasks:
+    - name: Display inventory hosts
+      debug:
+        msg: |
+          Monitoring the following hosts from inventory:
+          {% for host in groups['zammad_servers'] %}
+          - {{ host }}
+            IP: {{ hostvars[host].ansible_host | default('N/A') }}
+            State: {{ hostvars[host].state | default('N/A') }}
+            Owner: {{ hostvars[host].owner | default('N/A') }}
+          {% endfor %}
+
   tasks:
     - name: Create artifacts directory
       file:
@@ -52,12 +61,9 @@
           reachable_hosts: []
           unreachable_hosts: []
           total_checked: "{{ groups['zammad_servers'] | length }}"
+          hosts_detail: {}
 
-    - name: Debug - Show hosts to check
-      debug:
-        msg: "Checking reachability for hosts: {{ groups['zammad_servers'] }}"
-
-    - name: Check connectivity to all Zammad hosts
+    - name: Check connectivity to all hosts
       wait_for:
         host: "{{ hostvars[item].ansible_host | default(item) }}"
         port: "{{ check_port }}"
@@ -68,13 +74,21 @@
       ignore_errors: yes
       changed_when: false
 
-    - name: Parse reachability results
+    - name: Parse reachability results with host details
       set_fact:
         host_reachability: >-
           {{
             host_reachability | combine({
-              'reachable_hosts': host_reachability.reachable_hosts + [item.item],
-              'unreachable_hosts': host_reachability.unreachable_hosts + ([] if item is succeeded else [item.item])
+              'reachable_hosts': host_reachability.reachable_hosts + ([] if item is failed else [item.item]),
+              'unreachable_hosts': host_reachability.unreachable_hosts + ([] if item is succeeded else [item.item]),
+              'hosts_detail': host_reachability.hosts_detail | combine({
+                item.item: {
+                  'ip': hostvars[item.item].ansible_host | default('N/A'),
+                  'state': hostvars[item.item].state | default('N/A'),
+                  'owner': hostvars[item.item].owner | default('N/A'),
+                  'reachable': item is succeeded
+                }
+              })
             })
           }}
       loop: "{{ reachability_check.results }}"
@@ -92,15 +106,23 @@
           Reachable: {{ host_reachability.reachable_hosts | length }}
           Unreachable: {{ host_reachability.unreachable_hosts | length }}
           
-          Reachable Hosts:
-          {% for host in host_reachability.reachable_hosts %}
-          - {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          REACHABLE HOSTS:
+          {% for host in host_reachability.reachable_hosts | sort %}
+          ✓ {{ host }}
+            IP: {{ host_reachability.hosts_detail[host].ip }}
+            State: {{ host_reachability.hosts_detail[host].state }}
+            Owner: {{ host_reachability.hosts_detail[host].owner }}
           {% endfor %}
           
-          Unreachable Hosts:
-          {% for host in host_reachability.unreachable_hosts %}
-          - {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          {% if host_reachability.unreachable_hosts %}
+          UNREACHABLE HOSTS:
+          {% for host in host_reachability.unreachable_hosts | sort %}
+          ✗ {{ host }}
+            IP: {{ host_reachability.hosts_detail[host].ip }}
+            State: {{ host_reachability.hosts_detail[host].state }}
+            Owner: {{ host_reachability.hosts_detail[host].owner }}
           {% endfor %}
+          {% endif %}
 
     - name: Send alert email - Unreachable hosts detected
       community.general.mail:
@@ -124,12 +146,16 @@
           
           UNREACHABLE HOSTS:
           {% for host in host_reachability.unreachable_hosts | sort %}
-          • {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          • {{ host }} ({{ host_reachability.hosts_detail[host].ip }})
+            State: {{ host_reachability.hosts_detail[host].state }}
+            Owner: {{ host_reachability.hosts_detail[host].owner }}
           {% endfor %}
           
           REACHABLE HOSTS:
           {% for host in host_reachability.reachable_hosts | sort %}
-          • {{ host }} ({{ hostvars[host].ansible_host | default(host) }})
+          • {{ host }} ({{ host_reachability.hosts_detail[host].ip }})
+            State: {{ host_reachability.hosts_detail[host].state }}
+            Owner: {{ host_reachability.hosts_detail[host].owner }}
           {% endfor %}
           
           SUMMARY:
@@ -164,4 +190,4 @@
           
           Reports saved to: {{ report_dir }}
           Emails sent via KIT SMTP ({{ smtp_host }}:{{ smtp_port }})
-          ===============================
+          ==============================="
