@@ -19,8 +19,8 @@
     # OR use smtp.kit.edu with authentication
     smtp_host: "{{ smtp_host | default('smarthost.kit.edu') }}"
     smtp_port: "{{ smtp_port | default(25) }}"
-    smtp_username: "{{ smtp_username | default('') }}"
-    smtp_password: "{{ smtp_password | default('') }}"
+    # smtp_username: "{{ smtp_username | default('') }}"
+    # smtp_password: "{{ smtp_password | default('') }}"
     smtp_use_tls: "{{ smtp_use_tls | default(false) }}"
     
     # Email Configuration
@@ -194,7 +194,7 @@
           Regards,
           Automated Monitoring System
       ignore_errors: yes    
-      
+
     - name: Set play result
       set_fact:
         monitoring_result:
