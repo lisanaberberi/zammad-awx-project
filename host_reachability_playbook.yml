@@ -232,7 +232,7 @@
             }, recursive=True)
           }}
       when: cert_expiry_data is defined and cert_expiry_data | length > 0
-
+    
     # ================================
     # ALERTING SECTION
     # ================================
@@ -243,75 +243,31 @@
         secure: "never"
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
-        subject: "🚨 ALERT: {{ monitoring_report.unreachable_hosts | length }} host(s) unreachable - {{ monitoring_report.timestamp }}"
+        subject: "🚨 ALERT: {{ monitoring_report['reachability']['unreachable_hosts'] | length }} host(s) unreachable - {{ monitoring_report['timestamp'] }}"
         body: |
           HOST REACHABILITY ALERT
           =======================
           
-          Timestamp: {{ monitoring_report.timestamp }}
+          Timestamp: {{ monitoring_report['timestamp'] }}
           
           STATUS: UNREACHABLE HOSTS DETECTED
           
-          {{ monitoring_report.unreachable_hosts | length }} out of {{ monitoring_report.total_checked }} hosts are currently unreachable.
+          {{ monitoring_report['reachability']['unreachable_hosts'] | length }} out of {{ monitoring_report['reachability']['total_checked'] }} hosts are currently unreachable.
           
           UNREACHABLE HOSTS:
-          {% for host in monitoring_report.unreachable_hosts | sort %}
-          • {{ host }} ({{ monitoring_report.hosts_detail[host].ip }})
-            State: {{ monitoring_report.hosts_detail[host].state }}
-            Owner: {{ monitoring_report.hosts_detail[host].owner }}
+          {% for host in monitoring_report['reachability']['unreachable_hosts'] | sort %}
+          • {{ host }} ({{ monitoring_report['reachability']['hosts_detail'][host]['ip'] }})
+            State: {{ monitoring_report['reachability']['hosts_detail'][host]['state'] }}
+            Owner: {{ monitoring_report['reachability']['hosts_detail'][host]['owner'] }}
           {% endfor %}
           
-          REACHABLE HOSTS:
-          {% for host in monitoring_report.reachable_hosts | sort %}
-          • {{ host }} ({{ monitoring_report.hosts_detail[host].ip }})
-            State: {{ monitoring_report.hosts_detail[host].state }}
-            Owner: {{ monitoring_report.hosts_detail[host].owner }}
-          {% endfor %}
-          
-          SUMMARY:
-          - Total Hosts: {{ monitoring_report.total_checked }}
-          - Reachable: {{ monitoring_report.reachable_hosts | length }}
-          - Unreachable: {{ monitoring_report.unreachable_hosts | length }}
-          - Check Method: SSH Port {{ monitoring_report.check_port }}
-          
-          Please investigate the unreachable hosts immediately.
+          Please investigate immediately.
           
           Regards,
           Automated Monitoring System
       when:
-        - monitoring_report.unreachable_hosts | length > 0
+        - monitoring_report['reachability']['unreachable_hosts'] | length > 0
       ignore_errors: yes
-
-    - name: Send test email - For verification (optional)
-      community.general.mail:
-        host: "{{ smtp_host }}"
-        port: "{{ smtp_port }}"
-        secure: "never"
-        from: "{{ email_from }}"
-        to: ["{{ test_email_recipient }}"]
-        subject: "Test: Host Monitoring System - {{ monitoring_report.timestamp }}"
-        body: |
-          This is a test email from the Host Monitoring System.
-          
-          All {{ monitoring_report.total_checked }} hosts are currently reachable:
-          
-          {% for host in monitoring_report.reachable_hosts | sort %}
-          ✓ {{ host }} ({{ monitoring_report.hosts_detail[host].ip }})
-          {% endfor %}
-          
-          If you received this email, the monitoring system is working correctly.
-          
-          Regards,
-          Automated Monitoring System
-      ignore_errors: yes    
-
-    - name: Set play result
-      set_fact:
-        monitoring_result:
-          status: "{% if monitoring_report.unreachable_hosts | length == 0 %}success{% else %}warning{% endif %}"
-          unreachable_count: "{{ monitoring_report.unreachable_hosts | length }}"
-          reachable_count: "{{ monitoring_report.reachable_hosts | length }}"
-
 
     - name: Send alert email - High disk usage detected
       community.general.mail:
@@ -320,24 +276,24 @@
         secure: "never"
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
-        subject: "⚠️ ALERT: {{ monitoring_report.disk_space.high_usage_hosts | length }} host(s) with high disk usage (>{{ disk_usage_threshold }}%) - {{ monitoring_report.timestamp }}"
+        subject: "⚠️ ALERT: {{ monitoring_report['disk_space']['high_usage_hosts'] | length }} host(s) with high disk usage (>{{ disk_usage_threshold }}%) - {{ monitoring_report['timestamp'] }}"
         body: |
           DISK SPACE ALERT
           ================
           
-          Timestamp: {{ monitoring_report.timestamp }}
+          Timestamp: {{ monitoring_report['timestamp'] }}
           
           STATUS: HIGH DISK USAGE DETECTED
           
-          {{ monitoring_report.disk_space.high_usage_hosts | length }} host(s) have disk usage exceeding {{ disk_usage_threshold }}%.
+          {{ monitoring_report['disk_space']['high_usage_hosts'] | length }} host(s) have disk usage exceeding {{ disk_usage_threshold }}%.
           
           HOSTS WITH HIGH DISK USAGE:
-          {% for host in monitoring_report.disk_space.high_usage_hosts | sort %}
+          {% for host in monitoring_report['disk_space']['high_usage_hosts'] | sort %}
           • {{ host }}
-            Current Usage: {{ monitoring_report.disk_space.hosts_detail[host].usage_percent }}%
+            Current Usage: {{ monitoring_report['disk_space']['hosts_detail'][host]['usage_percent'] }}%
             Threshold: {{ disk_usage_threshold }}%
-            IP: {{ monitoring_report.reachability.hosts_detail[host].ip }}
-            Owner: {{ monitoring_report.reachability.hosts_detail[host].owner }}
+            IP: {{ monitoring_report['reachability']['hosts_detail'][host]['ip'] }}
+            Owner: {{ monitoring_report['reachability']['hosts_detail'][host]['owner'] }}
           {% endfor %}
           
           Please clean up disk space on these hosts.
@@ -345,7 +301,7 @@
           Regards,
           Automated Monitoring System
       when:
-        - monitoring_report.disk_space.high_usage_hosts | length > 0
+        - monitoring_report['disk_space']['high_usage_hosts'] | length > 0
       ignore_errors: yes
 
     - name: Send alert email - Certificate expiry warning
@@ -355,28 +311,28 @@
         secure: "never"
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
-        subject: "📅 ALERT: Certificates expiring soon or expired - {{ monitoring_report.timestamp }}"
+        subject: "📅 ALERT: Certificates expiring soon or expired - {{ monitoring_report['timestamp'] }}"
         body: |
           CERTIFICATE EXPIRY ALERT
           ========================
           
-          Timestamp: {{ monitoring_report.timestamp }}
+          Timestamp: {{ monitoring_report['timestamp'] }}
           
           STATUS: CERTIFICATE EXPIRY DETECTED
           
-          {% if monitoring_report.certificates.expired | length > 0 %}
+          {% if monitoring_report['certificates']['expired'] | length > 0 %}
           EXPIRED CERTIFICATES:
-          {% for host in monitoring_report.certificates.expired | sort %}
+          {% for host in monitoring_report['certificates']['expired'] | sort %}
           • {{ host }}
-            Details: {{ monitoring_report.certificates.hosts_detail[host] | default('N/A') }}
+            Details: {{ monitoring_report['certificates']['hosts_detail'][host] | default('N/A') }}
           {% endfor %}
           
           {% endif %}
-          {% if monitoring_report.certificates.expiring_soon | length > 0 %}
+          {% if monitoring_report['certificates']['expiring_soon'] | length > 0 %}
           CERTIFICATES EXPIRING SOON (within {{ cert_expiry_warning_days }} days):
-          {% for host in monitoring_report.certificates.expiring_soon | sort %}
+          {% for host in monitoring_report['certificates']['expiring_soon'] | sort %}
           • {{ host }}
-            Details: {{ monitoring_report.certificates.hosts_detail[host] | default('N/A') }}
+            Details: {{ monitoring_report['certificates']['hosts_detail'][host] | default('N/A') }}
           {% endfor %}
           
           {% endif %}
@@ -385,7 +341,7 @@
           Regards,
           Automated Monitoring System
       when:
-        - (monitoring_report.certificates.expired | length > 0) or (monitoring_report.certificates.expiring_soon | length > 0)
+        - (monitoring_report['certificates']['expired'] | length > 0) or (monitoring_report['certificates']['expiring_soon'] | length > 0)
       ignore_errors: yes
 
     - name: Display comprehensive monitoring summary
