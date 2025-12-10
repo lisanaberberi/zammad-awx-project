@@ -130,9 +130,7 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        username: "{{ smtp_username if smtp_username else omit }}"
-        password: "{{ smtp_password if smtp_password else omit }}"
-        secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+        secure: "never"
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "🚨 ALERT: {{ host_reachability.unreachable_hosts | length }} host(s) unreachable - {{ host_reachability.timestamp }}"
@@ -171,7 +169,6 @@
           Regards,
           Automated Monitoring System
       when:
-        - alert_on_unreachable | bool
         - host_reachability.unreachable_hosts | length > 0
       ignore_errors: yes
 
@@ -179,9 +176,7 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        username: "{{ smtp_username if smtp_username else omit }}"
-        password: "{{ smtp_password if smtp_password else omit }}"
-        secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+        secure: "never"
         from: "{{ email_from }}"
         to: ["{{ test_email_recipient }}"]
         subject: "Test: Host Monitoring System - {{ host_reachability.timestamp }}"
@@ -198,9 +193,8 @@
           
           Regards,
           Automated Monitoring System
-      ignore_errors: yes
-
-    - name: Set play result
+          
+      ignore_errors: yes    - name: Set play result
       set_fact:
         monitoring_result:
           status: "{% if host_reachability.unreachable_hosts | length == 0 %}success{% else %}warning{% endif %}"
