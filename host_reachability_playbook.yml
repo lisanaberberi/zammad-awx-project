@@ -168,6 +168,8 @@
         paths: "{{ cert_paths }}"
         patterns: "*.crt,*.pem"
         file_type: file
+        recurse: yes
+        follow: yes
       register: cert_files_check
       loop: "{{ monitoring_report.reachability.reachable_hosts }}"
       loop_control:
@@ -185,7 +187,13 @@
         openssl x509 -in "{{ cert.path }}" -noout -enddate 2>/dev/null || echo "ERROR"
         {% endfor %}
         {% else %}
-        echo "NO_CERTS_FOUND"
+        # If no files found via find module, try common cert filenames in live folders
+        for domain_dir in /etc/letsencrypt/live/*/; do
+          if [ -f "$domain_dir/cert.pem" ]; then
+            echo "FILE:$domain_dir/cert.pem"
+            openssl x509 -in "$domain_dir/cert.pem" -noout -enddate 2>/dev/null || echo "ERROR"
+          fi
+        done
         {% endif %}
       register: cert_expiry_check
       loop: "{{ cert_files_check.results }}"
