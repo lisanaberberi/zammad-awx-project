@@ -64,15 +64,26 @@
         state: directory
         mode: '0755'
 
-    - name: Initialize reachability report
+ 
+    - name: Initialize comprehensive monitoring report
       set_fact:
-        host_reachability:
+        monitoring_report:
           timestamp: "{{ now(utc=True).isoformat() }}"
-          check_port: "{{ check_port }}"
-          reachable_hosts: []
-          unreachable_hosts: []
-          total_checked: "{{ groups['zammad_servers'] | length }}"
-          hosts_detail: {}
+          reachability:
+            check_port: "{{ check_port }}"
+            reachable_hosts: []
+            unreachable_hosts: []
+            total_checked: "{{ groups['zammad_servers'] | length }}"
+            hosts_detail: {}
+          disk_space:
+            checked_hosts: []
+            high_usage_hosts: []
+            hosts_detail: {}
+          certificates:
+            checked_hosts: []
+            expiring_soon: []
+            expired: []
+            hosts_detail: {}
 
     # ================================
     # TASK 1: CHECK HOST REACHABILITY
@@ -90,54 +101,26 @@
 
     - name: Parse reachability results with host details
       set_fact:
-        host_reachability: >-
+        monitoring_report: >-
           {{
-            host_reachability | combine({
-              'reachable_hosts': host_reachability.reachable_hosts + ([] if item is failed else [item.item]),
-              'unreachable_hosts': host_reachability.unreachable_hosts + ([] if item is succeeded else [item.item]),
-              'hosts_detail': host_reachability.hosts_detail | combine({
-                item.item: {
-                  'ip': hostvars[item.item].ansible_host | default('N/A'),
-                  'state': hostvars[item.item].state | default('N/A'),
-                  'owner': hostvars[item.item].owner | default('N/A'),
-                  'reachable': item is succeeded
-                }
+            monitoring_report | combine({
+              'reachability': monitoring_report.reachability | combine({
+                'reachable_hosts': monitoring_report.reachability.reachable_hosts + ([] if item is failed else [item.item]),
+                'unreachable_hosts': monitoring_report.reachability.unreachable_hosts + ([] if item is succeeded else [item.item]),
+                'hosts_detail': monitoring_report.reachability.hosts_detail | combine({
+                  item.item: {
+                    'ip': hostvars[item.item].ansible_host | default('N/A'),
+                    'state': hostvars[item.item].state | default('N/A'),
+                    'owner': hostvars[item.item].owner | default('N/A'),
+                    'reachable': item is succeeded
+                  }
+                })
               })
             })
           }}
       loop: "{{ reachability_check.results }}"
       loop_control:
         label: "{{ item.item }}"
-
-    - name: Display reachability summary
-      debug:
-        msg: |
-          =========================
-          Reachability Check Summary
-          =========================
-          Timestamp: {{ host_reachability.timestamp }}
-          Total Hosts: {{ host_reachability.total_checked }}
-          Reachable: {{ host_reachability.reachable_hosts | length }}
-          Unreachable: {{ host_reachability.unreachable_hosts | length }}
-          
-          REACHABLE HOSTS:
-          {% for host in host_reachability.reachable_hosts | sort %}
-          ✓ {{ host }}
-            IP: {{ host_reachability.hosts_detail[host].ip }}
-            State: {{ host_reachability.hosts_detail[host].state }}
-            Owner: {{ host_reachability.hosts_detail[host].owner }}
-          {% endfor %}
-          
-          {% if host_reachability.unreachable_hosts %}
-          UNREACHABLE HOSTS:
-          {% for host in host_reachability.unreachable_hosts | sort %}
-          ✗ {{ host }}
-            IP: {{ host_reachability.hosts_detail[host].ip }}
-            State: {{ host_reachability.hosts_detail[host].state }}
-            Owner: {{ host_reachability.hosts_detail[host].owner }}
-          {% endfor %}
-          {% endif %}
-
 
 
     # ================================
