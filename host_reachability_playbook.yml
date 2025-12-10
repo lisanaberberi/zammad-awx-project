@@ -25,6 +25,7 @@
     # Email Configuration
     email_from: "zammad-monitoring@kit.edu"
     alert_recipients: ["ops-team@kit.edu"]
+    test_email_recipient: "your-email@kit.edu"  # Change this to your email for testing
     
     # Monitoring Configuration
     check_port: 22
@@ -131,8 +132,8 @@
         username: "{{ smtp_username }}"
         password: "{{ smtp_password }}"
         secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
-        from_addr: "{{ email_from }}"
-        to_addr: "{{ alert_recipients }}"
+        from: "{{ email_from }}"
+        to: "{{ alert_recipients }}"
         subject: "🚨 ALERT: {{ host_reachability.unreachable_hosts | length }} host(s) unreachable - {{ host_reachability.timestamp }}"
         body: |
           HOST REACHABILITY ALERT
@@ -171,6 +172,31 @@
       when:
         - alert_on_unreachable | bool
         - host_reachability.unreachable_hosts | length > 0
+      ignore_errors: yes
+
+    - name: Send test email - For verification (optional)
+      community.general.mail:
+        host: "{{ smtp_host }}"
+        port: "{{ smtp_port }}"
+        username: "{{ smtp_username }}"
+        password: "{{ smtp_password }}"
+        secure: "{{ 'starttls' if smtp_use_tls else 'never' }}"
+        from: "{{ email_from }}"
+        to: ["{{ test_email_recipient }}"]
+        subject: "Test: Host Monitoring System - {{ host_reachability.timestamp }}"
+        body: |
+          This is a test email from the Host Monitoring System.
+          
+          All {{ host_reachability.total_checked }} hosts are currently reachable:
+          
+          {% for host in host_reachability.reachable_hosts | sort %}
+          ✓ {{ host }} ({{ host_reachability.hosts_detail[host].ip }})
+          {% endfor %}
+          
+          If you received this email, the monitoring system is working correctly.
+          
+          Regards,
+          Automated Monitoring System
       ignore_errors: yes
 
     - name: Set play result
