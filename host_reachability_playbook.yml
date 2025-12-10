@@ -181,8 +181,11 @@
         {% set certs = item.files | default([]) %}
         {% if certs | length > 0 %}
         {% for cert in certs %}
-        openssl x509 -in "{{ cert.path }}" -noout -enddate 2>/dev/null || true
+        echo "FILE:{{ cert.path }}"
+        openssl x509 -in "{{ cert.path }}" -noout -enddate 2>/dev/null || echo "ERROR"
         {% endfor %}
+        {% else %}
+        echo "NO_CERTS_FOUND"
         {% endif %}
       register: cert_expiry_check
       loop: "{{ cert_files_check.results }}"
@@ -191,40 +194,34 @@
       delegate_to: "{{ item.item }}"
       ignore_errors: yes
       changed_when: false
-      when: item is not skipped
 
     - name: Parse certificate expiry results
       set_fact:
         cert_expiry_data: "{{ cert_expiry_data | default({}) | combine({
           item.item: {
             'expiry_output': item.stdout_lines | default([]),
-            'has_certs': (item.stdout_lines | length) > 0
+            'certs_found': (item.stdout_lines | selectattr('0', 'match', 'FILE:') | list | length),
+            'raw_output': item.stdout | default('')
           }
-        }) }}"
+        }, recursive=True) }}"
       loop: "{{ cert_expiry_check.results }}"
       loop_control:
         label: "{{ item.item }}"
-      when: item is not skipped
 
-    - name: Process certificate expiry dates
-      set_fact:
-        cert_info: "{{ lookup('template', 'cert_expiry_parser.j2') }}"
-      ignore_errors: yes
-
-    - name: Update monitoring report with certificate data
+    - name: Build certificate report from expiry data
       set_fact:
         monitoring_report: >-
           {{
             monitoring_report | combine({
               'certificates': {
                 'checked_hosts': monitoring_report.reachability.reachable_hosts,
-                'expiring_soon': cert_info.expiring_soon | default([]),
-                'expired': cert_info.expired | default([]),
-                'hosts_detail': cert_info.hosts_detail | default({})
+                'expiring_soon': cert_expiry_data | dict2items | selectattr('value.certs_found', '>', 0) | map(attribute='key') | list,
+                'expired': [],
+                'hosts_detail': cert_expiry_data
               }
             }, recursive=True)
           }}
-      when: cert_info is defined
+      when: cert_expiry_data is defined
 
 
     # ================================
