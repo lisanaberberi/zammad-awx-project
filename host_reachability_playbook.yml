@@ -35,6 +35,10 @@
 
         # Disk monitoring configuration
     disk_usage_threshold: 95  # Alert if usage > 95%
+    monitored_filesystems:  # List of filesystems to check
+      - "/"
+      - "/var"
+    
     
     # Certificate monitoring configuration
     cert_expiry_warning_days: 30  # Alert if expires in < 30 days
@@ -128,7 +132,10 @@
     # ================================
     - name: Check disk space on reachable hosts
       shell: |
-        df -h / | tail -1 | awk '{print $5}' | sed 's/%//'
+        for fs in {{ monitored_filesystems | join(' ') }}; do
+          usage=$(df -h "$fs" 2>/dev/null | tail -1 | awk '{print $5}' | sed 's/%//')
+          echo "FILESYSTEM:$fs|USAGE:$usage"
+        done
       register: disk_usage_check
       loop: "{{ monitoring_report.reachability.reachable_hosts }}"
       loop_control:
@@ -139,26 +146,41 @@
 
     - name: Parse disk space results
       set_fact:
-        monitoring_report: >-
-          {{
-            monitoring_report | combine({
-              'disk_space': monitoring_report.disk_space | combine({
-                'checked_hosts': monitoring_report.disk_space.checked_hosts + [item.item],
-                'high_usage_hosts': monitoring_report.disk_space.high_usage_hosts + ([] if (item.stdout | int(0) <= disk_usage_threshold) else [item.item]),
-                'hosts_detail': monitoring_report.disk_space.hosts_detail | combine({
-                  item.item: {
-                    'usage_percent': item.stdout | int(0),
-                    'threshold': disk_usage_threshold,
-                    'alert': (item.stdout | int(0) > disk_usage_threshold)
-                  }
-                })
-              })
-            })
-          }}
+        disk_details: "{{ disk_details | default({}) }}"
+
+    - name: Build disk space details for each host
+      set_fact:
+        disk_details: >-
+          {% set host = item.item %}
+          {% set lines = item.stdout_lines | default([]) %}
+          {% set fs_data = {} %}
+          {% for line in lines %}
+            {% if 'FILESYSTEM:' in line %}
+              {% set parts = line.split('|') %}
+              {% set fs = parts[0].split(':')[1] %}
+              {% set usage = parts[1].split(':')[1] | int(0) %}
+              {% set fs_data = fs_data | combine({fs: {'usage': usage, 'alert': usage > disk_usage_threshold}}) %}
+            {% endif %}
+          {% endfor %}
+          {{ disk_details | combine({host: fs_data}) }}
       loop: "{{ disk_usage_check.results }}"
       loop_control:
         label: "{{ item.item }}"
-      when: item is not skipped
+
+    - name: Build list of hosts with high disk usage
+      set_fact:
+        high_usage_hosts: []
+
+    - name: Identify high usage hosts
+      set_fact:
+        high_usage_hosts: "{{ high_usage_hosts + [host] }}"
+      loop: "{{ disk_details | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+      vars:
+        host: "{{ item.key }}"
+        has_alert: "{{ item.value | dict2items | selectattr('value.alert', 'equalto', true) | list | length > 0 }}"
+      when: has_alert
 
     # ================================
     # TASK 3: CHECK CERTIFICATE EXPIRY
@@ -290,8 +312,12 @@
           HOSTS WITH HIGH DISK USAGE:
           {% for host in monitoring_report['disk_space']['high_usage_hosts'] | sort %}
           • {{ host }}
-            Current Usage: {{ monitoring_report['disk_space']['hosts_detail'][host]['usage_percent'] }}%
-            Threshold: {{ disk_usage_threshold }}%
+            Filesystems with high usage:
+            {% for fs, data in monitoring_report['disk_space']['hosts_detail'][host].items() %}
+              {% if data.alert %}
+              - {{ fs }}: {{ data.usage }}% (threshold: {{ disk_usage_threshold }}%)
+              {% endif %}
+            {% endfor %}
             IP: {{ monitoring_report['reachability']['hosts_detail'][host]['ip'] }}
             Owner: {{ monitoring_report['reachability']['hosts_detail'][host]['owner'] }}
           {% endfor %}
