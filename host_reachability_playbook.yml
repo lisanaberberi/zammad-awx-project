@@ -144,43 +144,53 @@
       ignore_errors: yes
       changed_when: false
 
-    - name: Parse disk space results
+    - name: Initialize disk details
       set_fact:
-        disk_details: "{{ disk_details | default({}) }}"
+        disk_details: {}
+        high_usage_filtered: []
 
-    - name: Build disk space details for each host
+    - name: Parse disk usage output and build details
+      block:
+        - name: Process each host's disk output
+          set_fact:
+            disk_details: "{{ disk_details | combine({item.item: item.stdout | from_json}) }}"
+            high_usage_filtered: "{{ high_usage_filtered + ([item.item] if ('true' in item.stdout) else []) }}"
+          loop: "{{ disk_usage_check.results }}"
+          loop_control:
+            label: "{{ item.item }}"
+          vars:
+            json_output: |
+              {
+              {% set ns = namespace(first=true) %}
+              {% for line in item.stdout_lines %}
+                {% if 'FILESYSTEM:' in line %}
+                  {% if not ns.first %},{% endif %}
+                  {% set parts = line.split('|') %}
+                  {% set fs = parts[0].split(':')[1] %}
+                  {% set usage = parts[1].split(':')[1] | int(0) %}
+                  "{{ fs }}": {"usage": {{ usage }}, "alert": {{ (usage > disk_usage_threshold) | lower }}}
+                  {% set ns.first = false %}
+                {% endif %}
+              {% endfor %}
+              }
+          register: disk_parse_result
+
+    - name: Update monitoring report with disk space data
       set_fact:
-        disk_details: >-
-          {% set host = item.item %}
-          {% set lines = item.stdout_lines | default([]) %}
-          {% set fs_data = {} %}
-          {% for line in lines %}
-            {% if 'FILESYSTEM:' in line %}
-              {% set parts = line.split('|') %}
-              {% set fs = parts[0].split(':')[1] %}
-              {% set usage = parts[1].split(':')[1] | int(0) %}
-              {% set fs_data = fs_data | combine({fs: {'usage': usage, 'alert': usage > disk_usage_threshold}}) %}
-            {% endif %}
-          {% endfor %}
-          {{ disk_details | combine({host: fs_data}) }}
-      loop: "{{ disk_usage_check.results }}"
+        monitoring_report: >-
+          {{
+            monitoring_report | combine({
+              'disk_space': {
+                'checked_hosts': monitoring_report['reachability']['reachable_hosts'],
+                'high_usage_hosts': high_usage_filtered,
+                'hosts_detail': disk_details
+              }
+            }, recursive=True)
+          }}
+      when: disk_details is defined and disk_details | length > 0
       loop_control:
         label: "{{ item.item }}"
-
-    - name: Build list of hosts with high disk usage
-      set_fact:
-        high_usage_hosts: []
-
-    - name: Identify high usage hosts
-      set_fact:
-        high_usage_hosts: "{{ high_usage_hosts + [host] }}"
-      loop: "{{ disk_details | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
-      vars:
-        host: "{{ item.key }}"
-        has_alert: "{{ item.value | dict2items | selectattr('value.alert', 'equalto', true) | list | length > 0 }}"
-      when: has_alert
+      when: item is not skipped
 
     # ================================
     # TASK 3: CHECK CERTIFICATE EXPIRY
