@@ -176,9 +176,6 @@
               }
             }, recursive=True)
           }}
-      loop_control:
-        label: "{{ item.item }}"
-      when: item is not skipped
 
     # ================================
     # TASK 3: CHECK CERTIFICATE EXPIRY
