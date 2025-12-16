@@ -15,18 +15,17 @@
   become: no
   
   vars:
-    # SMTP Configuration - Use smarthost.kit.edu (no auth needed from KIT network)
-    # OR use smtp.kit.edu with authentication
-    smtp_host: "{{ smtp_host | default('smarthost.kit.edu') }}"
-    smtp_port: "{{ smtp_port | default(25) }}"
-    # smtp_username: "{{ smtp_username | default('') }}"
-    # smtp_password: "{{ smtp_password | default('') }}"
-    smtp_use_tls: "{{ smtp_use_tls | default(false) }}"
+    # SMTP Configuration - Use smtp.kit.edu with authentication
+    smtp_host: "{{ smtp_host | default('smtp.kit.edu') }}"
+    smtp_port: "{{ smtp_port | default(587) }}"
+    smtp_username: "{{ smtp_username | default('') }}"  # MUST be set as variable in job template
+    smtp_password: "{{ smtp_password | default('') }}"  # MUST be set as variable in job template
+    smtp_use_tls: "{{ smtp_use_tls | default(true) }}"   # IMPORTANT: Changed to true
     
     # Email Configuration
-    email_from: "{{ smtp_username }}@kit.edu"  # Use authenticated user's email
-    alert_recipients: ["{{ smtp_username }}@kit.edu"]  # Change to desired alert recipients
-    test_email_recipient: "lisana.berberi@kit.edu"  # Change this to your email for testing
+    email_from: "{{ smtp_username }}@kit.edu"
+    alert_recipients: ["{{ smtp_username }}@kit.edu"]
+    test_email_recipient: "lisana.berberi@kit.edu"
     
     # Monitoring Configuration
     check_port: 22
@@ -34,7 +33,7 @@
     alert_on_unreachable: true
 
         # Disk monitoring configuration
-    disk_usage_threshold: 95  # Alert if usage > 95%
+    disk_usage_threshold: 85  # Alert if usage > 85%
     monitored_filesystems:  # List of filesystems to check
       - "/"
       - "/var"
@@ -257,7 +256,9 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "never"
+        secure: "smtp"                          # Changed from "never" to "smtp"
+        username: "{{ smtp_username }}"         # ADD THIS
+        password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "🚨 ALERT: {{ monitoring_report['reachability']['unreachable_hosts'] | length }} host(s) unreachable - {{ monitoring_report['timestamp'] }}"
@@ -290,7 +291,9 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "never"
+        secure: "smtp"                          # Changed from "never" to "smtp"
+        username: "{{ smtp_username }}"         # ADD THIS
+        password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "⚠️ ALERT: {{ monitoring_report['disk_space']['high_usage_hosts'] | length }} host(s) with high disk usage (>{{ disk_usage_threshold }}%) - {{ monitoring_report['timestamp'] }}"
@@ -329,7 +332,9 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "never"
+        secure: "smtp"                          # Changed from "never" to "smtp"
+        username: "{{ smtp_username }}"         # ADD THIS
+        password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "📅 ALERT: Certificates expiring soon or expired - {{ monitoring_report['timestamp'] }}"
