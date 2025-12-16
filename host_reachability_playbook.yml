@@ -256,7 +256,7 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "smtp"                          # Changed from "never" to "smtp"
+        secure: "starttls"                         
         username: "{{ smtp_username }}"         # ADD THIS
         password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
@@ -291,7 +291,7 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "smtp"                          # Changed from "never" to "smtp"
+        secure: "starttls"                   
         username: "{{ smtp_username }}"         # ADD THIS
         password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
@@ -332,7 +332,7 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "smtp"                          # Changed from "never" to "smtp"
+        secure: "starttls"                          # Changed from "never" to "smtp"
         username: "{{ smtp_username }}"         # ADD THIS
         password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
