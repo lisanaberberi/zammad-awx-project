@@ -132,18 +132,11 @@
           -
           {% endif -%}
     
-    - name: Compute PostgreSQL version
+    - name: Set PostgreSQL version fact
       set_fact:
-        postgresql_version: >-
-          {% if postgresql_cmd_version.stdout is defined and postgresql_cmd_version.stdout | length > 0 -%}
-          {{ postgresql_cmd_version.stdout }}
-          {% elif postgresql_rpm_version.stdout is defined and postgresql_rpm_version.stdout | length > 0 -%}
-          {{ postgresql_rpm_version.stdout }}
-          {% elif postgresql_deb_version.stdout is defined and postgresql_deb_version.stdout | length > 0 -%}
-          {{ postgresql_deb_version.stdout }}
-          {% else -%}
-          -
-          {% endif -%}
+        postgresql_version_final: "{{ postgresql_version.stdout if (postgresql_version.stdout | default('')) | length > 0 else 'Not Installed' }}"
+    
+    
     
     - name: Parse KIT packages
       set_fact:
@@ -193,7 +186,7 @@
           zammad_enabled: "{{ zammad_service_enabled.stdout == 'enabled' if zammad_service_enabled is defined else false }}"
           redis_version: "{{ redis_version }}"
           elasticsearch_version: "{{ elasticsearch_version }}"
-          postgresql_version: "{{ postgresql_version.stdout | default('Not Installed') }}"
+          postgresql_version: "{{ postgresql_version_final }}"
           kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
         cacheable: yes
