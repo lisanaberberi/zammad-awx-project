@@ -6,6 +6,7 @@
   hosts: zammad_servers
   gather_facts: yes
   ignore_unreachable: yes
+  max_fail_percentage: 100
   
   tasks:
     - name: Check if Zammad is installed
