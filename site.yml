@@ -5,8 +5,8 @@
 - name: Collect Zammad Instance Information
   hosts: zammad_servers
   gather_facts: yes
+  ignore_errors: yes
   ignore_unreachable: yes
-  max_fail_percentage: 100
   
   tasks:
     - name: Check if Zammad is installed
@@ -26,14 +26,14 @@
       register: zammad_rpm_version
       ignore_errors: yes
       changed_when: false
-      when: ansible_os_family == "RedHat"
+      when: ansible_os_family is defined and ansible_os_family == "RedHat"
     
     - name: Get Zammad version from package (Debian)
       shell: dpkg -l zammad 2>/dev/null | grep zammad | awk '{print $3}' || echo ""
       register: zammad_deb_version
       ignore_errors: yes
       changed_when: false
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family is defined and ansible_os_family == "Debian"
     
     - name: Check if Zammad service is running
       shell: systemctl is-active zammad 2>/dev/null || echo "unknown"
@@ -75,14 +75,14 @@
       register: elasticsearch_rpm_version
       ignore_errors: yes
       changed_when: false
-      when: ansible_os_family == "RedHat"
+      when: ansible_os_family is defined and ansible_os_family == "RedHat"
     
     - name: Get Elasticsearch version from package (Debian)
       shell: dpkg -l | grep elasticsearch | awk '{print $3}' | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo ""
       register: elasticsearch_deb_version
       ignore_errors: yes
       changed_when: false
-      when: ansible_os_family == "Debian"
+      when: ansible_os_family is defined and ansible_os_family == "Debian"
     # PostgreSQL version collection
     - name: Get PostgreSQL version via psql
       shell: psql --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo ""
