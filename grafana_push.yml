@@ -174,58 +174,6 @@
         grafana_annotation_body: >-
             {{ grafana_annotation_body | combine({'time': (grafana_annotation_body.time | int)}) }}
 
-    # - name: Create annotation (dashboard-scoped) # only to test the body
-    #   uri:
-    #     url: "{{ grafana_url }}/api/annotations"
-    #     method: POST
-    #     headers:
-    #       Authorization: "Bearer {{ grafana_token | trim }}"
-    #       Content-Type: "application/json"
-    #     body_format: json        
-    #     body: >-
-    #       {{ grafana_annotation_body
-    #         | combine({'time': (grafana_annotation_body.time | int)}) }}
-
-    #     validate_certs: no
-    #     status_code: [200, 201, 202, 204]
-    #     return_content: yes
-    #   register: grafana_annotation_push
-
-    # - debug:
-    #     msg: "Status={{ grafana_annotation_push.status }} Content={{ grafana_annotation_push.content | default('') }}"
-
-
-
-    # --- Push each host to Grafana annotations (hard-coerce time to int) ---
-
-    # Build per-host payload (string-safe). We’ll coerce 'time' to int when sending.
-    # - name: Build per-host annotation payloads
-    #   set_fact:
-    #     grafana_host_payloads: "{{ (grafana_host_payloads | default([])) + [{
-    #       'dashboardUID': grafana_dashboard_uid,
-    #       'tags': ['awx_inventory', awx_inventory_name, item.name],
-    #       'text': (
-    #         '**Host:** ' ~ item.name ~ '\n' ~
-    #         '**ID:** ' ~ (item.id | string) ~ '\n' ~
-    #         '**IP Address:** ' ~ (item.vars.zammad_info.ip_address | default('N/A')) ~ '\n' ~
-    #         '**Owner:** ' ~ (item.vars.zammad_info.owner | default('N/A')) ~ '\n' ~
-    #         '**State:** ' ~ (item.vars.zammad_info.state | default('N/A')) ~ '\n' ~
-    #         '**OS:** ' ~ (item.vars.zammad_info.os | default('N/A')) ~ '\n' ~
-    #         '**Kernel:** ' ~ (item.vars.zammad_info.kernel | default('N/A')) ~ '\n' ~
-    #         '**CPU Count:** ' ~ (item.vars.zammad_info.cpu_count | default('N/A') | string) ~ '\n' ~
-    #         '**RAM:** ' ~ (item.vars.zammad_info.ram_gb | default('N/A')) ~ ' GB\n' ~
-    #         '**Zammad Version:** ' ~ (item.vars.zammad_info.zammad_version | default('N/A')) ~ '\n' ~
-    #         '**Zammad Status:** ' ~ (item.vars.zammad_info.zammad_active | ternary('Active', 'Inactive')) ~ '\n' ~
-    #         '**Redis:** ' ~ (item.vars.redis_info.installed | default('no')) ~ ' (v' ~ (item.vars.redis_info.version | default('-')) ~ ')\n' ~
-    #         '**Elasticsearch:** ' ~ (item.vars.elasticsearch_info.installed | default('no')) ~ ' (v' ~ (item.vars.elasticsearch_info.version | default('-')) ~ ')\n' ~
-    #         '**KIT Packages:** ' ~ (item.vars.zammad_info.kit_packages | default('None')) ~ '\n' ~
-    #         '**Last Updated:** ' ~ (item.vars.zammad_info.last_updated | default('N/A'))
-    #       ),
-    #       'time': ((lookup('pipe', 'date +%s') | int) * 1000)
-    #     }] }}"
-    #   loop: "{{ parsed_hosts }}"
-    #   loop_control:
-    #     label: "{{ item.name }}"
 
     - name: Build per-host annotation payloads
       set_fact:
@@ -236,23 +184,19 @@
             item.vars.zammad_info | default({})
             | combine({
               'host': item.name,
-              'id': item.id | string,
-              'ip_address': item.vars.zammad_info.ip_address | default('N/A'),
               'owner': item.vars.zammad_info.owner | default('N/A'),
               'state': item.vars.zammad_info.state | default('N/A'),
+              'zammad_version': item.vars.zammad_info.zammad_version | default('N/A'),
+              'postgresql_version': item.vars.postgresql_info.version | default('-'),
+              'redis_version': item.vars.redis_info.version | default('-'),
+              'elasticsearch_version': item.vars.elasticsearch_info.version | default('-'),
+              'kit_packages': item.vars.zammad_info.kit_packages | default('None'),
+              'id': item.id | string,
+              'ip_address': item.vars.zammad_info.ip_address | default('N/A'),
               'os': item.vars.zammad_info.os | default('N/A'),
               'kernel': item.vars.zammad_info.kernel | default('N/A'),
               'cpu_count': item.vars.zammad_info.cpu_count | default('N/A') | string,
               'ram_gb': item.vars.zammad_info.ram_gb | default('N/A'),
-              'zammad_version': item.vars.zammad_info.zammad_version | default('N/A'),
-              'zammad_status': item.vars.zammad_info.zammad_active | default(false) | ternary('Active', 'Inactive'),
-              'postgresql_installed': item.vars.postgresql_info.installed | default('no'),
-              'postgresql_version': item.vars.postgresql_info.version | default('-'),
-              'redis_installed': item.vars.redis_info.installed | default('no'),
-              'redis_version': item.vars.redis_info.version | default('-'),
-              'elasticsearch_installed': item.vars.elasticsearch_info.installed | default('no'),
-              'elasticsearch_version': item.vars.elasticsearch_info.version | default('-'),
-              'kit_packages': item.vars.zammad_info.kit_packages | default('None'),
               'last_updated': item.vars.zammad_info.last_updated | default('N/A')
             })
             | to_json
@@ -262,6 +206,45 @@
       loop: "{{ parsed_hosts }}"
       loop_control:
         label: "{{ item.name }}"
+
+        # Old debug of payloads
+
+    # - name: Build per-host annotation payloads
+    #   set_fact:
+    #     grafana_host_payloads: "{{ (grafana_host_payloads | default([])) + [{
+    #       'dashboardUID': grafana_dashboard_uid,
+    #       'tags': ['awx_inventory', awx_inventory_name, item.name],
+    #       'text': (
+    #         item.vars.zammad_info | default({})
+    #         | combine({
+    #           'host': item.name,
+    #           'owner': item.vars.zammad_info.owner | default('N/A'),
+    #           'state': item.vars.zammad_info.state | default('N/A'),
+    #           'zammad_version': item.vars.zammad_info.zammad_version | default('N/A'),
+    #           'zammad_status': item.vars.zammad_info.zammad_active | default(false) | ternary('Active', 'Inactive'),
+    #           'postgresql_installed': item.vars.postgresql_info.installed | default('no'),
+    #           'postgresql_version': item.vars.postgresql_info.version | default('-'),
+    #           'redis_installed': item.vars.redis_info.installed | default('no'),
+    #           'redis_version': item.vars.redis_info.version | default('-'),
+    #           'elasticsearch_installed': item.vars.elasticsearch_info.installed | default('no'),
+    #           'elasticsearch_version': item.vars.elasticsearch_info.version | default('-'),
+    #           'kit_packages': item.vars.zammad_info.kit_packages | default('None'),
+    #           'id': item.id | string,
+    #           'ip_address': item.vars.zammad_info.ip_address | default('N/A'),
+    #           'os': item.vars.zammad_info.os | default('N/A'),
+    #           'kernel': item.vars.zammad_info.kernel | default('N/A'),
+    #           'cpu_count': item.vars.zammad_info.cpu_count | default('N/A') | string,
+    #           'ram_gb': item.vars.zammad_info.ram_gb | default('N/A'),
+    #           'last_updated': item.vars.zammad_info.last_updated | default('N/A')
+    #         })
+    #         | to_json
+    #       ),
+    #       'time': ((lookup('pipe', 'date +%s') | int) * 1000)
+    #     }] }}"
+    #   loop: "{{ parsed_hosts }}"
+    #   loop_control:
+    #     label: "{{ item.name }}"
+
 
     # Optional: sanity check the first payload to confirm types before sending
     - name: Sanity check a sample host payload (debug)
