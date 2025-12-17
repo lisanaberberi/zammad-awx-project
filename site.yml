@@ -85,23 +85,9 @@
       when: ansible_os_family == "Debian"
 
     # PostgreSQL version collection
-    - name: Get PostgreSQL version (RedHat)
-      shell: rpm -qa | grep postgres | grep -oE '[0-9]+\.[0-9]+' | head -1 || echo ""
-      register: postgresql_rpm_version
-      ignore_errors: yes
-      changed_when: false
-      when: ansible_os_family == "RedHat"
-
-    - name: Get PostgreSQL version (Debian)
-      shell: dpkg -l | grep postgres | awk '{print $3}' | grep -oE '^[0-9]+\.[0-9]+' | head -1 || echo ""
-      register: postgresql_deb_version
-      ignore_errors: yes
-      changed_when: false
-      when: ansible_os_family == "Debian"
-
-    - name: Check PostgreSQL version via psql command (if installed)
-      shell: psql --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' || echo ""
-      register: postgresql_cmd_version
+    - name: Get PostgreSQL version via psql
+      shell: psql --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo ""
+      register: postgresql_version
       ignore_errors: yes
       changed_when: false
 
@@ -147,6 +133,19 @@
           {{ elasticsearch_rpm_version.stdout }}
           {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout is defined and elasticsearch_deb_version.stdout | length > 0 -%}
           {{ elasticsearch_deb_version.stdout }}
+          {% else -%}
+          -
+          {% endif -%}
+
+    - name: Compute PostgreSQL version
+      set_fact:
+        postgresql_version: >-
+          {% if postgresql_cmd_version.stdout is defined and postgresql_cmd_version.stdout | length > 0 -%}
+          {{ postgresql_cmd_version.stdout }}
+          {% elif postgresql_rpm_version.stdout is defined and postgresql_rpm_version.stdout | length > 0 -%}
+          {{ postgresql_rpm_version.stdout }}
+          {% elif postgresql_deb_version.stdout is defined and postgresql_deb_version.stdout | length > 0 -%}
+          {{ postgresql_deb_version.stdout }}
           {% else -%}
           -
           {% endif -%}
@@ -199,6 +198,7 @@
           zammad_enabled: "{{ zammad_service_enabled.stdout == 'enabled' if zammad_service_enabled is defined else false }}"
           redis_version: "{{ redis_version }}"
           elasticsearch_version: "{{ elasticsearch_version }}"
+          postgresql_version: "{{ postgresql_version.stdout | default('Not Installed') }}"
           kit_packages: "{{ kit_packages | default({}) }}"
           last_updated: "{{ ansible_date_time.iso8601 }}"
         cacheable: yes
@@ -215,6 +215,13 @@
         elasticsearch_info:
           version: "{{ elasticsearch_version }}"
           installed: "{{ 'yes' if elasticsearch_version != '-' else 'no' }}"
+        cacheable: yes
+
+    - name: Create PostgreSQL info dict
+      set_fact:
+        postgresql_info:
+          version: "{{ postgresql_version }}"
+          installed: "{{ 'yes' if postgresql_version != '-' else 'no' }}"
         cacheable: yes
     
     - name: Display collected info
@@ -293,6 +300,7 @@
           - **OS:** {{ info.os | default('Unknown') }}
           - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
           - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
+          - **Postgres dB Version:** {{ info.postgresql_version | default('Not Installed') }}
           - **Redis Version:** {{ info.redis_version | default('Not Available') }}
           - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
           - **Service Active:** {{ 'Yes' if info.zammad_active | default(false) else 'No' }}
@@ -373,6 +381,7 @@
             zammad_info: {{ hostvars[host_name].zammad_info | default({}) | to_json }}
             redis_info: {{ hostvars[host_name].redis_info | default({}) | to_json }}
             elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | default({})  | to_json }}
+            postgresql_info: {{ hostvars[host_name].postgresql_info | default({}) | to_json }}
             kit_packages: {{ hostvars[host_name].kit_packages | default({}) | to_json }}
       when:
         - awx_url is defined
