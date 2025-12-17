@@ -85,7 +85,7 @@
       when: ansible_os_family is defined and ansible_os_family == "Debian"
     # PostgreSQL version collection
     - name: Get PostgreSQL version via psql
-      shell: psql --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo ""
+      shell: psql --version 2>/dev/null | grep -oE '[0-9]+(\.[0-9]+){1,2}' | head -1
       register: postgresql_version
       ignore_errors: yes
       changed_when: false
@@ -107,11 +107,11 @@
       set_fact:
         zammad_version: >-
           {% if zammad_installed.stat.exists and (zammad_version_file is defined and zammad_version_file.content is defined) %}
-            {{ zammad_version_file.content | b64decode | trim }}
+            {{ (zammad_version_file.content | b64decode | trim) }}
           {% elif (zammad_rpm_version.stdout | default('')) | length > 0 %}
-            {{ zammad_rpm_version.stdout | default('') }}
+            {{ zammad_rpm_version.stdout | default('') | trim }}
           {% elif (zammad_deb_version.stdout | default('')) | length > 0 %}
-            {{ zammad_deb_version.stdout | default('') }}
+            {{ zammad_deb_version.stdout | default('') | trim }}
           {% else %}
             NO_ZAMMAD
           {% endif %}
@@ -123,11 +123,11 @@
       set_fact:
         elasticsearch_version: >-
           {% if elasticsearch_api is defined and elasticsearch_api.json is defined and elasticsearch_api.json.version is defined -%}
-          {{ elasticsearch_api.json.version.number }}
+          {{ elasticsearch_api.json.version.number | trim }}
           {% elif elasticsearch_rpm_version is defined and elasticsearch_rpm_version.stdout is defined and elasticsearch_rpm_version.stdout | length > 0 -%}
-          {{ elasticsearch_rpm_version.stdout }}
+          {{ elasticsearch_rpm_version.stdout | trim }}
           {% elif elasticsearch_deb_version is defined and elasticsearch_deb_version.stdout is defined and elasticsearch_deb_version.stdout | length > 0 -%}
-          {{ elasticsearch_deb_version.stdout }}
+          {{ elasticsearch_deb_version.stdout | trim }}
           {% else -%}
           -
           {% endif -%}
@@ -215,8 +215,8 @@
     - name: Create PostgreSQL info dict
       set_fact:
         postgresql_info:
-          version: "{{ postgresql_version }}"
-          installed: "{{ 'yes' if postgresql_version != '-' else 'no' }}"
+          version: "{{ postgresql_version.stdout | default('-') }}"
+          installed: "{{ 'yes' if (postgresql_version.stdout | default('')) | length > 0 else 'no' }}"
         cacheable: yes
     
     - name: Display collected info
