@@ -84,6 +84,27 @@
       changed_when: false
       when: ansible_os_family == "Debian"
 
+    # PostgreSQL version collection
+    - name: Get PostgreSQL version (RedHat)
+      shell: rpm -qa | grep postgres | grep -oE '[0-9]+\.[0-9]+' | head -1 || echo ""
+      register: postgresql_rpm_version
+      ignore_errors: yes
+      changed_when: false
+      when: ansible_os_family == "RedHat"
+
+    - name: Get PostgreSQL version (Debian)
+      shell: dpkg -l | grep postgres | awk '{print $3}' | grep -oE '^[0-9]+\.[0-9]+' | head -1 || echo ""
+      register: postgresql_deb_version
+      ignore_errors: yes
+      changed_when: false
+      when: ansible_os_family == "Debian"
+
+    - name: Check PostgreSQL version via psql command (if installed)
+      shell: psql --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+' || echo ""
+      register: postgresql_cmd_version
+      ignore_errors: yes
+      changed_when: false
+
     # Zammad packages
     - name: Get installed Zammad packages
       shell: |
