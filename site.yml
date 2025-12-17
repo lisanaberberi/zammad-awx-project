@@ -215,7 +215,7 @@
     - name: Create PostgreSQL info dict
       set_fact:
         postgresql_info:
-          version: "{{ postgresql_version.stdout | default('-') }}"
+          version: "{{ postgresql_version.stdout}}"
           installed: "{{ 'yes' if (postgresql_version.stdout | default('')) | length > 0 else 'no' }}"
         cacheable: yes
     
