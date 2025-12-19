@@ -19,13 +19,14 @@
     smtp_host: "{{ smtp_host | default('smtp.kit.edu') }}"
     smtp_port: "{{ smtp_port | default(25) }}"
     smtp_username: "{{ smtp_username | default('') }}"  # MUST be set as variable in job template
-    smtp_password: "{{ smtp_password | default('') }}"  # MUST be set as variable in job template
+    smtp_password: "{{ kit_smtp_password }}"  # Pass via job template extra var
+    #smtp_password: "{{ smtp_password | default('') }}"  # MUST be set as variable in job template
     smtp_use_tls: "{{ smtp_use_tls | default(true) }}"   # IMPORTANT: Changed to true
     
     # Email Configuration
     email_from: "{{ smtp_username }}@kit.edu"
     alert_recipients: ["{{ smtp_username }}@kit.edu"]
-    test_email_recipient: "lisana.berberi@kit.edu"
+   # test_email_recipient: "lisana.berberi@kit.edu"
     
     # Monitoring Configuration
     check_port: 22
@@ -256,7 +257,9 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "starttls"                         
+        secure: "never"       
+        username: "{{ smtp_username }}"
+        password: "{{ smtp_password }}"                  
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "🚨 ALERT: {{ monitoring_report['reachability']['unreachable_hosts'] | length }} host(s) unreachable - {{ monitoring_report['timestamp'] }}"
