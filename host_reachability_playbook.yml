@@ -257,8 +257,6 @@
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
         secure: "starttls"                         
-        username: "{{ smtp_username }}"         # ADD THIS
-        password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "🚨 ALERT: {{ monitoring_report['reachability']['unreachable_hosts'] | length }} host(s) unreachable - {{ monitoring_report['timestamp'] }}"
@@ -292,8 +290,6 @@
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
         secure: "starttls"                   
-        username: "{{ smtp_username }}"         # ADD THIS
-        password: "{{ smtp_password }}"         # ADD THIS
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "⚠️ ALERT: {{ monitoring_report['disk_space']['high_usage_hosts'] | length }} host(s) with high disk usage (>{{ disk_usage_threshold }}%) - {{ monitoring_report['timestamp'] }}"
@@ -332,9 +328,7 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "starttls"                          # Changed from "never" to "smtp"
-        username: "{{ smtp_username }}"         # ADD THIS
-        password: "{{ smtp_password }}"         # ADD THIS
+        secure: "starttls"                       
         from: "{{ email_from }}"
         to: "{{ alert_recipients }}"
         subject: "📅 ALERT: Certificates expiring soon or expired - {{ monitoring_report['timestamp'] }}"
