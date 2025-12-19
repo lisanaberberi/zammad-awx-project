@@ -18,8 +18,8 @@
     # SMTP Configuration - Use smtp.kit.edu with authentication
     smtp_host: "{{ smtp_host | default('smtp.kit.edu') }}"
     smtp_port: "{{ smtp_port | default(25) }}"
-    smtp_username: "{{ smtp_username | default('') }}"  # MUST be set as variable in job template
-    smtp_password: "{{ smtp_password | default('') }}"  # MUST be set as variable in job template
+    smtp_username: "{{ smtp_username | default('') }}"  # passed as credential in job template
+    smtp_password: "{{ smtp_password | default('') }}"  # passed as credential in job template
     smtp_use_tls: "{{ smtp_use_tls | default(true) }}"   # IMPORTANT: Changed to true
     
     # Email Configuration
