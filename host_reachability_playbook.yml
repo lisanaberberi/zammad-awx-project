@@ -257,7 +257,7 @@
       community.general.mail:
         host: "{{ smtp_host }}"
         port: "{{ smtp_port }}"
-        secure: "never"       
+        secure: "starttls"       
         username: "{{ smtp_username }}"
         password: "{{ smtp_password }}"                  
         from: "{{ email_from }}"
