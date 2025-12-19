@@ -24,9 +24,9 @@
     smtp_use_tls: "{{ smtp_use_tls | default(true) }}"   # IMPORTANT: Changed to true
     
     # Email Configuration
-    email_from: "{{ smtp_username }}@kit.edu"
-    alert_recipients: ["{{ smtp_username }}@kit.edu"]
-   # test_email_recipient: "lisana.berberi@kit.edu"
+    email_from: "{{ smtp_username }}"
+    alert_recipients: ["{{ smtp_username }}"]
+    test_email_recipient: "lisana.berberi@kit.edu"
     
     # Monitoring Configuration
     check_port: 22
