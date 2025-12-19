@@ -70,7 +70,7 @@
     - name: Initialize comprehensive monitoring report
       set_fact:
         monitoring_report:
-          timestamp: "{{ now(utc=True).isoformat() }}"
+          timestamp: "{{ now(utc=True).strftime('%Y-%m-%d %H:%M:%S') }}"
           reachability:
             check_port: "{{ check_port }}"
             reachable_hosts: []
