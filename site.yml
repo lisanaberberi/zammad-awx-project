@@ -153,7 +153,7 @@
                 {% if pkg_name in known_kit %}
                   {% set _ = packages.update({pkg_name: pkg_version}) %}
                 {% else %}
-                  {% set _ = other_pkgs.append(pkg_name + ' ' + pkg_version %}
+                  {% set _ = other_pkgs.append(pkg_name + ' ' + pkg_version) %}
                 {% endif %}
               {% endif %}
             {% endfor %}
