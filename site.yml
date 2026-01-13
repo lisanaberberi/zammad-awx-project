@@ -92,7 +92,7 @@
     # Zammad packages
     - name: Get installed Zammad packages
       shell: |
-        zammad run rails r 'Package.all.each { |p| puts "#{p.name}||#{p.version}||#{p.vendor}" }'
+        zammad run rails r 'Package.all.each { |p| puts "#{p.name}||#{p.version}" }'
       register: zammad_packages
       ignore_errors: yes
       changed_when: false
