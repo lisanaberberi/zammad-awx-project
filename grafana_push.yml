@@ -177,7 +177,7 @@
 
     - name: Build per-host annotation payloads (dynamic kit_packages)
       vars:
-        kit_pkg_dict: "{{ item.vars.zammad_info.kit_packages | default({}) }}"
+        kit_pkg_dict: "{{ (item.vars.zammad_info.kit_packages | default('{}')) | from_json if (item.vars.zammad_info.kit_packages | default('{}')) is string else (item.vars.zammad_info.kit_packages | default({})) }}"
         unknown_items: "{{ kit_pkg_dict | dict2items | rejectattr('key', 'match', '^(KIT-|WLCG-|Zammad-)') | list }}"
         other_packages_str: "{{ unknown_items | map(attribute='key') | zip(unknown_items | map(attribute='value')) | map('join', ': ') | join(', ') }}"
       set_fact:
