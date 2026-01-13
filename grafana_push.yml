@@ -105,7 +105,7 @@
 
 
     # Format the zammad_info.other_packages into structured lists
-    - name: Normalize other_packages safely
+    - name: Normalize zammad_info.other_packages safely
       set_fact:
         parsed_hosts: >-
           {{
@@ -115,19 +115,26 @@
                   item.vars.zammad_info | default({})
                 ) | combine({
                   'other_packages': (
-                    item.vars.zammad_info.other_packages | default('')
+                    (item.vars.zammad_info | default({})).get('other_packages', '') is string
                   ) | ternary(
-                    [{
-                      'name': (
-                        item.vars.zammad_info.other_packages
-                        | regex_replace(' ([0-9].*)$', '')
-                      ),
-                      'version': (
-                        item.vars.zammad_info.other_packages
-                        | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')
-                        | default('unknown', true)
-                      )
-                    }],
+                    (
+                      (item.vars.zammad_info | default({})).get('other_packages', '') | length > 0
+                    ) | ternary(
+                      [{
+                        'name': (
+                          (item.vars.zammad_info | default({}))
+                          .get('other_packages', '')
+                          | regex_replace(' ([0-9].*)$', '')
+                        ),
+                        'version': (
+                          (item.vars.zammad_info | default({}))
+                          .get('other_packages', '')
+                          | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')
+                          | default('unknown', true)
+                        )
+                      }],
+                      []
+                    ),
                     []
                   )
                 })
@@ -135,6 +142,9 @@
             }) | list
           }}
       loop: "{{ parsed_hosts }}"
+      loop_control:
+        label: "{{ item.name }}"
+
 
 
     # Quick sanity check
