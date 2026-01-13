@@ -103,37 +103,6 @@
       loop_control:
         label: "{{ (item.name | default(item['name'])) | default('row') }}"
 
-
-    # Format the zammad_info.other_packages into structured lists
-    - name: Normalize zammad_info.other_packages safely
-      set_fact:
-        parsed_hosts: >-
-          {{
-            parsed_hosts | map('combine', {
-              'vars': {
-                'zammad_info': (
-                  (item.vars.zammad_info | default({})) 
-                  | combine({
-                      'other_packages': (
-                        ((item.vars.zammad_info | default({})).get('other_packages', '') | string).strip() | length > 0
-                      ) | ternary(
-                        [{
-                          'name': ((item.vars.zammad_info | default({})).get('other_packages', '') | regex_replace(' ([0-9].*)$', '')),
-                          'version': ((item.vars.zammad_info | default({})).get('other_packages', '') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') | default('unknown', true))
-                        }],
-                        []
-                      )
-                    })
-                )
-              }
-            }) | list
-          }}
-      loop: "{{ parsed_hosts }}"
-      loop_control:
-        label: "{{ item.name }}"
-
-
-
     # Quick sanity check
     - name: Hostnames we will push
       debug:
