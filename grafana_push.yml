@@ -112,32 +112,19 @@
             parsed_hosts | map('combine', {
               'vars': {
                 'zammad_info': (
-                  item.vars.zammad_info | default({})
-                ) | combine({
-                  'other_packages': (
-                    (item.vars.zammad_info | default({})).get('other_packages', '') is string
-                  ) | ternary(
-                    (
-                      (item.vars.zammad_info | default({})).get('other_packages', '') | length > 0
-                    ) | ternary(
-                      [{
-                        'name': (
-                          (item.vars.zammad_info | default({}))
-                          .get('other_packages', '')
-                          | regex_replace(' ([0-9].*)$', '')
-                        ),
-                        'version': (
-                          (item.vars.zammad_info | default({}))
-                          .get('other_packages', '')
-                          | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+')
-                          | default('unknown', true)
-                        )
-                      }],
-                      []
-                    ),
-                    []
-                  )
-                })
+                  (item.vars.zammad_info | default({})) 
+                  | combine({
+                      'other_packages': (
+                        ((item.vars.zammad_info | default({})).get('other_packages', '') | string).strip() | length > 0
+                      ) | ternary(
+                        [{
+                          'name': ((item.vars.zammad_info | default({})).get('other_packages', '') | regex_replace(' ([0-9].*)$', '')),
+                          'version': ((item.vars.zammad_info | default({})).get('other_packages', '') | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') | default('unknown', true))
+                        }],
+                        []
+                      )
+                    })
+                )
               }
             }) | list
           }}
