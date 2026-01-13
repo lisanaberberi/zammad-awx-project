@@ -176,6 +176,10 @@
 
 
     - name: Build per-host annotation payloads (dynamic kit_packages)
+      vars:
+        kit_pkg_dict: "{{ item.vars.zammad_info.kit_packages | default({}) }}"
+        unknown_items: "{{ kit_pkg_dict | dict2items | rejectattr('key', 'match', '^(KIT-|WLCG-|Zammad-)') | list }}"
+        other_packages_str: "{{ unknown_items | map(attribute='key') | zip(unknown_items | map(attribute='value')) | map('join', ': ') | join(', ') }}"
       set_fact:
         grafana_host_payloads: "{{ (grafana_host_payloads | default([])) + [{
           'dashboardUID': grafana_dashboard_uid,
@@ -188,16 +192,9 @@
               'state': item.vars.zammad_info.state | default('N/A'),
               'zammad_version': item.vars.zammad_info.zammad_version | default('N/A'),
               'kit_packages': (
-                (item.vars.zammad_info.kit_packages | default({}))
+                kit_pkg_dict
                 | combine({
-                  'other_packages': (
-                    item.vars.zammad_info.kit_packages | default({})
-                    | dict2items
-                    | rejectattr('key', 'match', '^(KIT-|WLCG-|Zammad-)')
-                    | map(attribute='key' ~ ': ' ~ attribute='value')
-                    | list
-                    | join(', ')
-                  )
+                  'other_packages': other_packages_str
                 })
               ) | to_json,
               'postgresql_version': item.vars.postgresql_info.version | default('-'),
@@ -218,9 +215,6 @@
       loop: "{{ parsed_hosts }}"
       loop_control:
         label: "{{ item.name }}"
-
-        # Old debug of payloads
-
 
 
     # Optional: sanity check the first payload to confirm types before sending
