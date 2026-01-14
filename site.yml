@@ -142,7 +142,7 @@
       set_fact:
         kit_packages: >-
           {% set packages = {} %}
-          {% set known_kit = ['KIT-Customizations', 'KIT-Filter', 'KIT-Form', 'KIT-Mobile', 'KIT-Newsletter', 'KIT-Trigger'] %}
+          {% set known_kit = ['KIT-Customizations','KIT-Filter','KIT-Form','KIT-Mobile','KIT-Newsletter','KIT-Trigger'] %}
           {% set other_pkgs = [] %}
           {% if zammad_packages.stdout_lines is defined %}
             {% for line in zammad_packages.stdout_lines %}
@@ -153,7 +153,7 @@
                 {% if pkg_name in known_kit %}
                   {% set _ = packages.update({pkg_name: pkg_version}) %}
                 {% else %}
-                  {% set _ = other_pkgs.append({pkg_name, pkg_version}) %}
+                  {% set _ = other_pkgs.append({'name': pkg_name, 'version': pkg_version}) %}
                 {% endif %}
               {% endif %}
             {% endfor %}
@@ -163,9 +163,10 @@
               {% set _ = packages.update({kit: '-'}) %}
             {% endif %}
           {% endfor %}
-          {% set _ = packages.update({'other_packages': other_pkgs | join('; ')}) %}
+          {% set _ = packages.update({'other_packages': other_pkgs}) %}
           {{ packages }}
       when: zammad_version != 'NO_ZAMMAD'
+
     
     - name: Create Zammad info dict
       set_fact:
