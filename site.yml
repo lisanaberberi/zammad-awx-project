@@ -148,11 +148,11 @@
             {% for line in zammad_packages.stdout_lines %}
               {% set parts = line.split('||') %}
               {% if parts | length == 2 %}
-                {% set pkg_name = parts[0] %}
-                {% set pkg_version = parts[1] %}
+                {% set pkg_name = parts[0] | trim %}
+                {% set pkg_version = parts[1] | trim %}
                 {% if pkg_name in known_kit %}
                   {% set _ = packages.update({pkg_name: pkg_version}) %}
-                {% else %}
+                {% elif pkg_name != '' %}
                   {% set _ = other_pkgs.append({'name': pkg_name, 'version': pkg_version}) %}
                 {% endif %}
               {% endif %}
