@@ -342,6 +342,8 @@
             )
           }}
       when: awx_hosts is defined and awx_hosts.json.results | length > 0
+
+    - hosts: localhost
     - name: Update host variables in AWX for all zammad_servers
       loop: "{{ groups['zammad_servers'] | select('in', hostvars) | select('defined') | list }}"
       loop_control:
