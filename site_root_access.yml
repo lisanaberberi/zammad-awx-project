@@ -244,6 +244,7 @@
           }}
         dest: "/runner/artifacts/zammad_inventory_full.json"
       changed_when: false
+      delegate_to: localhost
     # CSV report
     - name: Generate CSV header
       set_fact:

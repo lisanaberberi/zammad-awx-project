@@ -243,6 +243,7 @@
             ) | to_nice_json
           }}
         dest: "/runner/artifacts/zammad_inventory_full.json"
+      delegate_to: localhost
       changed_when: false
     # CSV report
     - name: Generate CSV header
