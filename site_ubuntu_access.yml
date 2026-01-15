@@ -243,8 +243,8 @@
             ) | to_nice_json
           }}
         dest: "/runner/artifacts/zammad_inventory_full.json"
-      delegate_to: localhost
       changed_when: false
+      delegate_to: localhost
     # CSV report
     - name: Generate CSV header
       set_fact:
@@ -320,6 +320,10 @@
         - lookup('env', 'TOWER_HOST') | length > 0
         - lookup('env', 'TOWER_USERNAME') | length > 0
         - lookup('env', 'TOWER_PASSWORD') | length > 0
+
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
     - name: Lookup all hosts in this inventory
       uri:
         url: "{{ awx_url }}/api/v2/inventories/{{ tower_inventory_id }}/hosts/?page_size=200"
@@ -330,7 +334,10 @@
         validate_certs: no
         status_code: 200
       register: awx_hosts
-      when: awx_url is defined
+      when: hostvars['localhost']['awx_url'] is defined
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
     - name: Build AWX host mapping
       set_fact:
         awx_host_map: >-
@@ -341,9 +348,15 @@
               | zip(awx_hosts.json.results | map(attribute='id'))
             )
           }}
-      when: awx_hosts is defined and awx_hosts.json.results | length > 0
+      when: 
+        - hostvars['localhost']['awx_hosts'] is defined
+        - hostvars['localhost']['awx_hosts'].json.results | length > 0
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
     - name: Update host variables in AWX for all zammad_servers
-      loop: "{{ groups['zammad_servers'] | select('in', hostvars) | select('defined') | list }}"
+      loop: "{{ groups['zammad_servers'] }}"
       loop_control:
         loop_var: host_name
       uri:
@@ -353,6 +366,7 @@
         password: "{{ awx_pass }}"
         force_basic_auth: yes
         validate_certs: no
+        timeout: 30
         body_format: json
         body:
           variables: |
@@ -363,6 +377,25 @@
             postgresql_info: {{ hostvars[host_name].postgresql_info | default({}) | to_json }}
             kit_packages: {{ hostvars[host_name].kit_packages | default({}) | to_json }}
       when:
-        - awx_url is defined
-        - awx_host_map[host_name] is defined
+        - hostvars['localhost']['awx_url'] is defined
+        - item in hostvars['localhost']['awx_host_map']
+        - hostvars[item] is defined
+      async: 30
+      poll: 0
+      delegate_to: localhost
+      ignore_errors: yes
+
+    - name: Wait for AWX updates to complete
+      async_status:
+        jid: "{{ item.ansible_job_id }}"
+      loop: "{{ awx_update_jobs.results | default([]) }}"
+      when: 
+        - item.ansible_job_id is defined
+        - not item.skipped | default(false)
+      register: awx_update_results
+      until: awx_update_results.finished
+      retries: 90
+      delay: 1
+      run_once: true
+      delegate_to: localhost
       ignore_errors: yes
