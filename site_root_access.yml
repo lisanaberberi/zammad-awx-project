@@ -264,6 +264,7 @@
           {{ csv_header }}
           {{ csv_rows }}
         dest: "/runner/artifacts/zammad_inventory_report.csv"
+      delegate_to: localhost
       changed_when: false
     # Markdown report
     - name: Generate formatted Markdown report
@@ -300,6 +301,7 @@
           {{ kp.other_packages | default('None') }}
           ---
           {% endfor %}
+      delegate_to: localhost
 # ======================================
 # Play 3: Push Facts to AWX Inventory
 # ======================================
@@ -341,7 +343,7 @@
           }}
       when: awx_hosts is defined and awx_hosts.json.results | length > 0
     - name: Update host variables in AWX for all zammad_servers
-      loop: "{{ groups['zammad_servers'] }}"
+      loop: "{{ groups['zammad_servers'] | select('in', hostvars) | select('defined') | list }}"
       loop_control:
         loop_var: host_name
       uri:
