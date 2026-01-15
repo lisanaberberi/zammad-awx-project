@@ -3,7 +3,7 @@
 # Play 1: Collect Zammad Instance Information
 # ======================================
 - name: Collect Zammad Instance Information
-  hosts: zammad_servers
+  hosts: zammad_root_servers
   gather_facts: yes
   ignore_errors: yes
   ignore_unreachable: yes
