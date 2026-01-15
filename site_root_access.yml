@@ -219,7 +219,7 @@
 # Play 2: Generate Centralized Reports
 # ======================================
 - name: Generate Centralized Reports
-  hosts: localhost
+  hosts: zammad_servers
   gather_facts: no
   connection: local
   become: no
@@ -302,7 +302,7 @@
 # Play 3: Push Facts to AWX Inventory
 # ======================================
 - name: Push collected facts to AWX inventory
-  hosts: localhost
+  hosts: zammad_servers
   gather_facts: no
   connection: local
   become: no
