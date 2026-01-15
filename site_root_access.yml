@@ -323,7 +323,7 @@
 
       run_once: true
       delegate_to: localhost
-      delegate_facts: true
+
     - name: Lookup all hosts in this inventory
       uri:
         url: "{{ awx_url }}/api/v2/inventories/{{ tower_inventory_id }}/hosts/?page_size=200"
@@ -334,10 +334,10 @@
         validate_certs: no
         status_code: 200
       register: awx_hosts
-      when: hostvars['localhost']['awx_url'] is defined
+      when: awx_url is defined
       run_once: true
       delegate_to: localhost
-      delegate_facts: true
+
     - name: Build AWX host mapping
       set_fact:
         awx_host_map: >-
@@ -349,8 +349,8 @@
             )
           }}
       when: 
-        - hostvars['localhost']['awx_hosts'] is defined
-        - hostvars['localhost']['awx_hosts'].json.results | length > 0
+        - awx_hosts is defined
+        - awx_hosts.json.results | length > 0
       run_once: true
       delegate_to: localhost
       delegate_facts: true
