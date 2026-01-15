@@ -1,6 +1,7 @@
 ---
 - name: Export AWX Inventory Hosts to Grafana
-  hosts: zammad_servers
+  hosts: localhost
+  connection: local
   gather_facts: false
   vars:
     awx_inventory_name: "{{ AWX_INVENTORY_NAME }}"
