@@ -230,6 +230,7 @@
         path: "/runner/artifacts/"
         state: directory
         mode: '0755'
+      delegate_to: localhost
     # JSON report
     - name: Generate JSON report
       copy:
