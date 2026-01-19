@@ -141,30 +141,20 @@
     - name: Parse KIT packages
       set_fact:
         kit_packages: >-
-          {% set packages = {} %}
-          {% set known_kit = ['KIT-Customizations','KIT-Filter','KIT-Form','KIT-Mobile','KIT-Newsletter','KIT-Trigger'] %}
-          {% set other_pkgs = [] %}
+          {% set all_pkgs = [] %}
           {% if zammad_packages.stdout_lines is defined %}
             {% for line in zammad_packages.stdout_lines %}
               {% set parts = line.split('||') %}
               {% if parts | length == 2 %}
                 {% set pkg_name = parts[0] | trim %}
                 {% set pkg_version = parts[1] | trim %}
-                {% if pkg_name in known_kit %}
-                  {% set _ = packages.update({pkg_name: pkg_version}) %}
-                {% elif pkg_name != '' %}
-                  {% set _ = other_pkgs.append({'name': pkg_name, 'version': pkg_version}) %}
+                {% if pkg_name != '' %}
+                  {% set _ = all_pkgs.append({'name': pkg_name, 'version': pkg_version}) %}
                 {% endif %}
               {% endif %}
             {% endfor %}
           {% endif %}
-          {% for kit in known_kit %}
-            {% if kit not in packages %}
-              {% set _ = packages.update({kit: '-'}) %}
-            {% endif %}
-          {% endfor %}
-          {% set _ = packages.update({'other_packages': other_pkgs}) %}
-          {{ packages }}
+          {{ all_pkgs | to_json }}
       when: zammad_version != 'NO_ZAMMAD'
 
     
