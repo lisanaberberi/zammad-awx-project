@@ -39,6 +39,24 @@
           - grafana_token is defined and grafana_token != ''
         fail_msg: "One or more required environment variables are missing."
 
+
+    # -----------------------------
+    # 2.1 Clear existing Grafana annotations
+    # -----------------------------
+    - name: Clear Grafana annotations table and reset ID sequence (SQLite)
+      community.general.sqlite3_db:
+        db: "{{ GRAFANA_SQLITE_DB_PATH }}"
+        query: |
+          DELETE FROM annotation;
+          DELETE FROM sqlite_sequence WHERE name='annotation';
+      register: truncate_result
+      delegate_to: localhost
+
+    - name: Confirm annotation table cleared
+      debug:
+        msg: "Grafana annotations table cleared and ID sequence reset to 1"
+      when: truncate_result is succeeded
+
     # -----------------------------
     # 3️⃣ Query AWX inventory hosts
     # -----------------------------
