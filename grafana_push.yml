@@ -43,19 +43,23 @@
     # -----------------------------
     # 2.1 Clear existing Grafana annotations
     # -----------------------------
-    - name: Clear Grafana annotations table and reset ID sequence (SQLite)
-      community.general.sqlite3_db:
-        db: "{{ GRAFANA_SQLITE_DB_PATH }}"
-        query: |
-          DELETE FROM annotation;
-          DELETE FROM sqlite_sequence WHERE name='annotation';
-      register: truncate_result
-      delegate_to: localhost
+    # - name: Clear Grafana annotations table and reset ID sequence (SQLite)
+    #   community.general.sqlite3_db:
+    #     db: "{{ GRAFANA_SQLITE_DB_PATH }}"
+    #     query: |
+    #       DELETE FROM annotation;
+    #       DELETE FROM sqlite_sequence WHERE name='annotation';
+    #   register: truncate_result
+    #   delegate_to: localhost
 
-    - name: Confirm annotation table cleared
-      debug:
-        msg: "Grafana annotations table cleared and ID sequence reset to 1"
-      when: truncate_result is succeeded
+    # - name: Confirm annotation table cleared
+    #   debug:
+    #     msg: "Grafana annotations table cleared and ID sequence reset to 1"
+    #   when: truncate_result is succeeded
+    - name: Clear Grafana annotations table (SQLite)
+      ansible.builtin.command:
+        cmd: sqlite3 /path/to/grafana.db "DELETE FROM annotation; DELETE FROM sqlite_sequence WHERE name='annotation';"
+      become: yes
 
     # -----------------------------
     # 3️⃣ Query AWX inventory hosts
