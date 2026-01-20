@@ -141,7 +141,7 @@
     - name: Parse KIT packages
       set_fact:
         kit_packages: >-
-          {% set all_pkgs = [] %}
+          {% set all_pkgs = {} %}
           {% if zammad_packages.stdout_lines is defined %}
             {% for line in zammad_packages.stdout_lines %}
               {% set parts = line.split('||') %}
@@ -149,7 +149,7 @@
                 {% set pkg_name = parts[0] | trim %}
                 {% set pkg_version = parts[1] | trim %}
                 {% if pkg_name != '' %}
-                  {% set _ = all_pkgs.append({'name': pkg_name, 'version': pkg_version}) %}
+                  {% set _ = all_pkgs.update({pkg_name: pkg_version}) %}
                 {% endif %}
               {% endif %}
             {% endfor %}
