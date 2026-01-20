@@ -59,7 +59,6 @@
     - name: Clear Grafana annotations table (SQLite)
       ansible.builtin.command:
         cmd: sqlite3 /var/lib/grafana/grafana.db "DELETE FROM annotation; DELETE FROM sqlite_sequence WHERE name='annotation';"
-      become: yes
 
     # -----------------------------
     # 3️⃣ Query AWX inventory hosts
