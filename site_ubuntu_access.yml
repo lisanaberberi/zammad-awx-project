@@ -368,10 +368,11 @@
             kit_packages: {{ hostvars[host_name].kit_packages | default({}) | to_json }}
       when:
         - hostvars['localhost']['awx_url'] is defined
-        - item in hostvars['localhost']['awx_host_map']
-        - hostvars[item] is defined
+        - host_name in hostvars['localhost']['awx_host_map']  
+        - hostvars[host_name] is defined        
       async: 30
       poll: 0
+      register: awx_update_jobs
       delegate_to: localhost
       ignore_errors: yes
 
