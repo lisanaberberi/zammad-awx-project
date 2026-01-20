@@ -58,7 +58,7 @@
     #   when: truncate_result is succeeded
     - name: Clear Grafana annotations table (SQLite)
       ansible.builtin.command:
-        cmd: sqlite3 /path/to/grafana.db "DELETE FROM annotation; DELETE FROM sqlite_sequence WHERE name='annotation';"
+        cmd: sqlite3 /var/lib/grafana/grafana.db "DELETE FROM annotation; DELETE FROM sqlite_sequence WHERE name='annotation';"
       become: yes
 
     # -----------------------------
