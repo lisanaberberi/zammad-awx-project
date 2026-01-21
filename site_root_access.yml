@@ -292,7 +292,7 @@
     #       ---
     #       {% endfor %}
     #   delegate_to: localhost
-    
+
 # ======================================
 # Play 3: Push Facts to AWX Inventory
 # ======================================
@@ -333,12 +333,13 @@
     - name: Build list of hosts with zammad_info collected
       set_fact:
         hosts_with_facts: >-
-          {{
-            groups['zammad_servers']
-            | select('in', hostvars)
-            | select(lambda h: hostvars[h].zammad_info is defined)
-            | list
-          }}
+          {% set result = [] %}
+          {% for host in groups['zammad_servers'] %}
+            {% if hostvars[host].zammad_info is defined %}
+              {% set _ = result.append(host) %}
+            {% endif %}
+          {% endfor %}
+          {{ result }}
 
     - name: Show hosts that will be updated
       debug:
