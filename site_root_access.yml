@@ -296,7 +296,7 @@
 # Play 3: Push Facts to AWX Inventory
 # ======================================
 - name: Push collected facts to AWX inventory
-  hosts: zammad_servers
+  hosts: localhost
   gather_facts: no
   connection: local
   become: no
@@ -345,8 +345,24 @@
       delegate_to: localhost
       delegate_facts: true
 
+    - name: Build list of hosts that actually have zammad_info collected
+      set_fact:
+        hosts_with_facts: >-
+          {{
+            groups['zammad_servers'] 
+            | select('in', hostvars) 
+            | select('match', '^.*$')
+            | map('extract', hostvars)
+            | selectattr('zammad_info', 'defined')
+            | map(attribute='inventory_hostname')
+            | list
+          }}
+      run_once: true
+      delegate_to: localhost
+      delegate_facts: true
+
     - name: Update host variables in AWX for all zammad_servers
-      loop: "{{ groups['zammad_servers'] }}"
+      loop: "{{ hostvars['localhost']['hosts_with_facts'] }}"
       loop_control:
         loop_var: host_name
       uri:
