@@ -292,6 +292,7 @@
     #       ---
     #       {% endfor %}
     #   delegate_to: localhost
+    
 # ======================================
 # Play 3: Push Facts to AWX Inventory
 # ======================================
@@ -300,19 +301,13 @@
   run_once: true
   gather_facts: no
   connection: local
-  become: no
+
   tasks:
     - name: Get AWX credentials from environment
       set_fact:
         awx_url: "{{ lookup('env', 'TOWER_HOST') }}"
         awx_user: "{{ lookup('env', 'TOWER_USERNAME') }}"
         awx_pass: "{{ lookup('env', 'TOWER_PASSWORD') }}"
-      when: 
-        - lookup('env', 'TOWER_HOST') | length > 0
-        - lookup('env', 'TOWER_USERNAME') | length > 0
-        - lookup('env', 'TOWER_PASSWORD') | length > 0
-
-      #run_once: true
 
     - name: Lookup all hosts in this inventory
       uri:
@@ -322,11 +317,7 @@
         password: "{{ awx_pass }}"
         force_basic_auth: yes
         validate_certs: no
-        status_code: 200
       register: awx_hosts
-      when: awx_url is defined
-      #run_once: true
-
 
     - name: Build AWX host mapping
       set_fact:
@@ -338,10 +329,6 @@
               | zip(awx_hosts.json.results | map(attribute='id'))
             )
           }}
-      when: 
-        - awx_hosts is defined
-        - awx_hosts.json.results | length > 0
-      #run_once: true
 
     - name: Build list of hosts with zammad_info collected
       set_fact:
@@ -349,7 +336,7 @@
           {{
             groups['zammad_servers']
             | select('in', hostvars)
-            | select('extract', hostvars, 'zammad_info')
+            | select(lambda h: hostvars[h].zammad_info is defined)
             | list
           }}
 
@@ -360,45 +347,21 @@
           awx_id: "{{ awx_host_map[item] | default('NOT FOUND') }}"
       loop: "{{ hosts_with_facts }}"
 
-    - name: Update host variables in AWX for all zammad_servers
-      loop: "{{ hostvars['localhost']['hosts_with_facts'] }}"
-      loop_control:
-        loop_var: host_name
+    - name: Update host variables in AWX
       uri:
-        url: "{{ awx_url }}/api/v2/hosts/{{ awx_host_map[host_name] }}/"
+        url: "{{ awx_url }}/api/v2/hosts/{{ awx_host_map[item] }}/"
         method: PATCH
         user: "{{ awx_user }}"
         password: "{{ awx_pass }}"
         force_basic_auth: yes
         validate_certs: no
-        timeout: 30
         body_format: json
         body:
-          variables: |
-            ---
-            zammad_info: {{ hostvars[host_name].zammad_info | default({}) | to_json }}
-            redis_info: {{ hostvars[host_name].redis_info | default({}) | to_json }}
-            elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | default({})  | to_json }}
-            postgresql_info: {{ hostvars[host_name].postgresql_info | default({}) | to_json }}
-            kit_packages: {{ hostvars[host_name].kit_packages | default({}) | to_json }}
-      when:
-        - hostvars['localhost']['awx_url'] is defined
-        - host_name in hostvars['localhost']['awx_host_map']  
-        - hostvars[host_name] is defined        
-      async: 30
-      poll: 0
-      register: awx_update_jobs
-      ignore_errors: yes
-
-    - name: Wait for AWX updates to complete
-      async_status:
-        jid: "{{ item.ansible_job_id }}"
-      loop: "{{ awx_update_jobs.results | default([]) }}"
-      when: 
-        - item.ansible_job_id is defined
-        - not item.skipped | default(false)
-      register: awx_update_results
-      until: awx_update_results.finished
-      retries: 90
-      delay: 1
-      ignore_errors: yes
+          variables:
+            zammad_info: "{{ hostvars[item].zammad_info }}"
+            redis_info: "{{ hostvars[item].redis_info }}"
+            elasticsearch_info: "{{ hostvars[item].elasticsearch_info }}"
+            postgresql_info: "{{ hostvars[item].postgresql_info }}"
+            kit_packages: "{{ hostvars[item].kit_packages }}"
+      loop: "{{ hosts_with_facts }}"
+      when: item in awx_host_map
