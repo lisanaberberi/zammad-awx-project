@@ -222,81 +222,82 @@
         mode: '0755'
       delegate_to: localhost
     # JSON report
-    - name: Generate JSON report
-      copy:
-        content: >-
-          {{
-            dict(
-              groups['zammad_servers'] | select('in', hostvars) | list | zip(
-                groups['zammad_servers'] | select('in', hostvars) | map('extract', hostvars, 'zammad_info') | select('defined') | list
-              ) | list
-            ) | to_nice_json
-          }}
-        dest: "/runner/artifacts/zammad_inventory_full.json"
-      changed_when: false
-      delegate_to: localhost
+    # - name: Generate JSON report
+    #   copy:
+    #     content: >-
+    #       {{
+    #         dict(
+    #           groups['zammad_servers'] | select('in', hostvars) | list | zip(
+    #             groups['zammad_servers'] | select('in', hostvars) | map('extract', hostvars, 'zammad_info') | select('defined') | list
+    #           ) | list
+    #         ) | to_nice_json
+    #       }}
+    #     dest: "/runner/artifacts/zammad_inventory_full.json"
+    #   changed_when: false
+    #   delegate_to: localhost
     # CSV report
-    - name: Generate CSV header
-      set_fact:
-        csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,PostgreSQL Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
-    - name: Generate CSV rows
-      set_fact:
-        csv_rows: |
-          {% for host in groups['zammad_servers'] %}
-          {% set info = hostvars[host].zammad_info | default({}) %}
-          {% if info %}
-          {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.postgresql_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
-          {% endif %}
-          {% endfor %}
-    - name: Generate CSV report
-      copy:
-        content: |
-          {{ csv_header }}
-          {{ csv_rows }}
-        dest: "/runner/artifacts/zammad_inventory_report.csv"
-      delegate_to: localhost
-      changed_when: false
+    # - name: Generate CSV header
+    #   set_fact:
+    #     csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,PostgreSQL Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
+    # - name: Generate CSV rows
+    #   set_fact:
+    #     csv_rows: |
+    #       {% for host in groups['zammad_servers'] %}
+    #       {% set info = hostvars[host].zammad_info | default({}) %}
+    #       {% if info %}
+    #       {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.postgresql_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
+    #       {% endif %}
+    #       {% endfor %}
+    # - name: Generate CSV report
+    #   copy:
+    #     content: |
+    #       {{ csv_header }}
+    #       {{ csv_rows }}
+    #     dest: "/runner/artifacts/zammad_inventory_report.csv"
+    #   delegate_to: localhost
+    #  changed_when: false
     # Markdown report
-    - name: Generate formatted Markdown report
-      copy:
-        dest: /runner/artifacts/zammad_inventory_report.md
-        content: |
-          # Zammad Infrastructure Inventory Report
-          **Generated:** {{ now(utc=True).isoformat() }}
-          **Total Hosts:** {{ groups['zammad_servers'] | length }}
-          ---
-          {% for host in groups['zammad_servers'] | sort %}
-          {% set info = hostvars[host].zammad_info | default({}) %}
-          ## {{ info.hostname | default(host) }}
-          - **IP Address:** {{ info.ip_address | default('Unknown') }}
-          - **Owner:** {{ info.owner | default('Unknown') }}
-          - **State:** {{ info.state | default('Unknown') }}
-          - **OS:** {{ info.os | default('Unknown') }}
-          - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
-          - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
-          - **Postgres dB Version:** {{ info.postgresql_version | default('Not Installed') }}
-          - **Redis Version:** {{ info.redis_version | default('Not Available') }}
-          - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
-          - **Service Active:** {{ 'Yes' if info.zammad_active | default(false) else 'No' }}
-          - **Service Enabled:** {{ 'Yes' if info.zammad_enabled | default(false) else 'No' }}
-          ### KIT Packages
-          {% set kp = info.kit_packages | default({}) %}
-          - **KIT-Customizations:** {{ kp['KIT-Customizations'] | default('-') }}
-          - **KIT-Filter:** {{ kp['KIT-Filter'] | default('-') }}
-          - **KIT-Form:** {{ kp['KIT-Form'] | default('-') }}
-          - **KIT-Mobile:** {{ kp['KIT-Mobile'] | default('-') }}
-          - **KIT-Newsletter:** {{ kp['KIT-Newsletter'] | default('-') }}
-          - **KIT-Trigger:** {{ kp['KIT-Trigger'] | default('-') }}
-          ### Other Packages
-          {{ kp.other_packages | default('None') }}
-          ---
-          {% endfor %}
-      delegate_to: localhost
+    # - name: Generate formatted Markdown report
+    #   copy:
+    #     dest: /runner/artifacts/zammad_inventory_report.md
+    #     content: |
+    #       # Zammad Infrastructure Inventory Report
+    #       **Generated:** {{ now(utc=True).isoformat() }}
+    #       **Total Hosts:** {{ groups['zammad_servers'] | length }}
+    #       ---
+    #       {% for host in groups['zammad_servers'] | sort %}
+    #       {% set info = hostvars[host].zammad_info | default({}) %}
+    #       ## {{ info.hostname | default(host) }}
+    #       - **IP Address:** {{ info.ip_address | default('Unknown') }}
+    #       - **Owner:** {{ info.owner | default('Unknown') }}
+    #       - **State:** {{ info.state | default('Unknown') }}
+    #       - **OS:** {{ info.os | default('Unknown') }}
+    #       - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
+    #       - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
+    #       - **Postgres dB Version:** {{ info.postgresql_version | default('Not Installed') }}
+    #       - **Redis Version:** {{ info.redis_version | default('Not Available') }}
+    #       - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
+    #       - **Service Active:** {{ 'Yes' if info.zammad_active | default(false) else 'No' }}
+    #       - **Service Enabled:** {{ 'Yes' if info.zammad_enabled | default(false) else 'No' }}
+    #       ### KIT Packages
+    #       {% set kp = info.kit_packages | default({}) %}
+    #       - **KIT-Customizations:** {{ kp['KIT-Customizations'] | default('-') }}
+    #       - **KIT-Filter:** {{ kp['KIT-Filter'] | default('-') }}
+    #       - **KIT-Form:** {{ kp['KIT-Form'] | default('-') }}
+    #       - **KIT-Mobile:** {{ kp['KIT-Mobile'] | default('-') }}
+    #       - **KIT-Newsletter:** {{ kp['KIT-Newsletter'] | default('-') }}
+    #       - **KIT-Trigger:** {{ kp['KIT-Trigger'] | default('-') }}
+    #       ### Other Packages
+    #       {{ kp.other_packages | default('None') }}
+    #       ---
+    #       {% endfor %}
+    #   delegate_to: localhost
 # ======================================
 # Play 3: Push Facts to AWX Inventory
 # ======================================
 - name: Push collected facts to AWX inventory
-  hosts: localhost
+  hosts: all
+  run_once: true
   gather_facts: no
   connection: local
   become: no
@@ -358,7 +359,7 @@
           host: "{{ item }}"
           awx_id: "{{ awx_host_map[item] | default('NOT FOUND') }}"
       loop: "{{ hosts_with_facts }}"
-      
+
     - name: Update host variables in AWX for all zammad_servers
       loop: "{{ hostvars['localhost']['hosts_with_facts'] }}"
       loop_control:
