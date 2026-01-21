@@ -141,7 +141,7 @@
     - name: Parse KIT packages
       set_fact:
         kit_packages: >-
-          {% set all_pkgs = [] %}
+          {% set all_pkgs = {} %}
           {% if zammad_packages.stdout_lines is defined %}
             {% for line in zammad_packages.stdout_lines %}
               {% set parts = line.split('||') %}
@@ -149,12 +149,12 @@
                 {% set pkg_name = parts[0] | trim %}
                 {% set pkg_version = parts[1] | trim %}
                 {% if pkg_name != '' %}
-                  {% set _ = all_pkgs.append({'name': pkg_name, 'version': pkg_version}) %}
+                  {% set _ = all_pkgs.update({pkg_name: pkg_version}) %}
                 {% endif %}
               {% endif %}
             {% endfor %}
           {% endif %}
-          {{ all_pkgs | to_json }}
+          {{ all_pkgs }}
       when: zammad_version != 'NO_ZAMMAD'
 
     
@@ -222,97 +222,92 @@
         mode: '0755'
       delegate_to: localhost
     # JSON report
-    - name: Generate JSON report
-      copy:
-        content: >-
-          {{
-            dict(
-              groups['zammad_servers'] | select('in', hostvars) | list | zip(
-                groups['zammad_servers'] | select('in', hostvars) | map('extract', hostvars, 'zammad_info') | select('defined') | list
-              ) | list
-            ) | to_nice_json
-          }}
-        dest: "/runner/artifacts/zammad_inventory_full.json"
-      changed_when: false
-      delegate_to: localhost
+    # - name: Generate JSON report
+    #   copy:
+    #     content: >-
+    #       {{
+    #         dict(
+    #           groups['zammad_servers'] | select('in', hostvars) | list | zip(
+    #             groups['zammad_servers'] | select('in', hostvars) | map('extract', hostvars, 'zammad_info') | select('defined') | list
+    #           ) | list
+    #         ) | to_nice_json
+    #       }}
+    #     dest: "/runner/artifacts/zammad_inventory_full.json"
+    #   changed_when: false
+    #   delegate_to: localhost
     # CSV report
-    - name: Generate CSV header
-      set_fact:
-        csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,PostgreSQL Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
-    - name: Generate CSV rows
-      set_fact:
-        csv_rows: |
-          {% for host in groups['zammad_servers'] %}
-          {% set info = hostvars[host].zammad_info | default({}) %}
-          {% if info %}
-          {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.postgresql_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
-          {% endif %}
-          {% endfor %}
-    - name: Generate CSV report
-      copy:
-        content: |
-          {{ csv_header }}
-          {{ csv_rows }}
-        dest: "/runner/artifacts/zammad_inventory_report.csv"
-      delegate_to: localhost
-      changed_when: false
+    # - name: Generate CSV header
+    #   set_fact:
+    #     csv_header: "Name,IP,Owner,OS,RAM,State,Zammad Version,PostgreSQL Version,Redis Version,Elasticsearch Version,KIT-Customizations,KIT-Filter,KIT-Form,KIT-Mobile,KIT-Newsletter,KIT-Trigger,Other Packages"
+    # - name: Generate CSV rows
+    #   set_fact:
+    #     csv_rows: |
+    #       {% for host in groups['zammad_servers'] %}
+    #       {% set info = hostvars[host].zammad_info | default({}) %}
+    #       {% if info %}
+    #       {{ info.hostname | default(host) }},{{ info.ip_address | default('-') }},{{ info.owner | default('-') }},{{ info.os | default('-') }},{{ info.ram_gb | default('-') }},{{ info.state | default('-') }},{{ info.zammad_version | default('-') }},{{ info.postgresql_version | default('-') }},{{ info.redis_version | default('-') }},{{ info.elasticsearch_version | default('-') }},{{ info.kit_packages['KIT-Customizations'] | default('-') }},{{ info.kit_packages['KIT-Filter'] | default('-') }},{{ info.kit_packages['KIT-Form'] | default('-') }},{{ info.kit_packages['KIT-Mobile'] | default('-') }},{{ info.kit_packages['KIT-Newsletter'] | default('-') }},{{ info.kit_packages['KIT-Trigger'] | default('-') }},"{{ info.kit_packages.other_packages | default('') }}"
+    #       {% endif %}
+    #       {% endfor %}
+    # - name: Generate CSV report
+    #   copy:
+    #     content: |
+    #       {{ csv_header }}
+    #       {{ csv_rows }}
+    #     dest: "/runner/artifacts/zammad_inventory_report.csv"
+    #   delegate_to: localhost
+    #  changed_when: false
     # Markdown report
-    - name: Generate formatted Markdown report
-      copy:
-        dest: /runner/artifacts/zammad_inventory_report.md
-        content: |
-          # Zammad Infrastructure Inventory Report
-          **Generated:** {{ now(utc=True).isoformat() }}
-          **Total Hosts:** {{ groups['zammad_servers'] | length }}
-          ---
-          {% for host in groups['zammad_servers'] | sort %}
-          {% set info = hostvars[host].zammad_info | default({}) %}
-          ## {{ info.hostname | default(host) }}
-          - **IP Address:** {{ info.ip_address | default('Unknown') }}
-          - **Owner:** {{ info.owner | default('Unknown') }}
-          - **State:** {{ info.state | default('Unknown') }}
-          - **OS:** {{ info.os | default('Unknown') }}
-          - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
-          - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
-          - **Postgres dB Version:** {{ info.postgresql_version | default('Not Installed') }}
-          - **Redis Version:** {{ info.redis_version | default('Not Available') }}
-          - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
-          - **Service Active:** {{ 'Yes' if info.zammad_active | default(false) else 'No' }}
-          - **Service Enabled:** {{ 'Yes' if info.zammad_enabled | default(false) else 'No' }}
-          ### KIT Packages
-          {% set kp = info.kit_packages | default({}) %}
-          - **KIT-Customizations:** {{ kp['KIT-Customizations'] | default('-') }}
-          - **KIT-Filter:** {{ kp['KIT-Filter'] | default('-') }}
-          - **KIT-Form:** {{ kp['KIT-Form'] | default('-') }}
-          - **KIT-Mobile:** {{ kp['KIT-Mobile'] | default('-') }}
-          - **KIT-Newsletter:** {{ kp['KIT-Newsletter'] | default('-') }}
-          - **KIT-Trigger:** {{ kp['KIT-Trigger'] | default('-') }}
-          ### Other Packages
-          {{ kp.other_packages | default('None') }}
-          ---
-          {% endfor %}
-      delegate_to: localhost
+    # - name: Generate formatted Markdown report
+    #   copy:
+    #     dest: /runner/artifacts/zammad_inventory_report.md
+    #     content: |
+    #       # Zammad Infrastructure Inventory Report
+    #       **Generated:** {{ now(utc=True).isoformat() }}
+    #       **Total Hosts:** {{ groups['zammad_servers'] | length }}
+    #       ---
+    #       {% for host in groups['zammad_servers'] | sort %}
+    #       {% set info = hostvars[host].zammad_info | default({}) %}
+    #       ## {{ info.hostname | default(host) }}
+    #       - **IP Address:** {{ info.ip_address | default('Unknown') }}
+    #       - **Owner:** {{ info.owner | default('Unknown') }}
+    #       - **State:** {{ info.state | default('Unknown') }}
+    #       - **OS:** {{ info.os | default('Unknown') }}
+    #       - **RAM:** {{ info.ram_gb | default('Unknown') }} GB
+    #       - **Zammad Version:** {{ info.zammad_version | default('Not Installed') }}
+    #       - **Postgres dB Version:** {{ info.postgresql_version | default('Not Installed') }}
+    #       - **Redis Version:** {{ info.redis_version | default('Not Available') }}
+    #       - **Elasticsearch Version:** {{ info.elasticsearch_version | default('Not Available') }}
+    #       - **Service Active:** {{ 'Yes' if info.zammad_active | default(false) else 'No' }}
+    #       - **Service Enabled:** {{ 'Yes' if info.zammad_enabled | default(false) else 'No' }}
+    #       ### KIT Packages
+    #       {% set kp = info.kit_packages | default({}) %}
+    #       - **KIT-Customizations:** {{ kp['KIT-Customizations'] | default('-') }}
+    #       - **KIT-Filter:** {{ kp['KIT-Filter'] | default('-') }}
+    #       - **KIT-Form:** {{ kp['KIT-Form'] | default('-') }}
+    #       - **KIT-Mobile:** {{ kp['KIT-Mobile'] | default('-') }}
+    #       - **KIT-Newsletter:** {{ kp['KIT-Newsletter'] | default('-') }}
+    #       - **KIT-Trigger:** {{ kp['KIT-Trigger'] | default('-') }}
+    #       ### Other Packages
+    #       {{ kp.other_packages | default('None') }}
+    #       ---
+    #       {% endfor %}
+    #   delegate_to: localhost
+
 # ======================================
 # Play 3: Push Facts to AWX Inventory
 # ======================================
 - name: Push collected facts to AWX inventory
-  hosts: zammad_servers
+  hosts: all
+  run_once: true
   gather_facts: no
   connection: local
-  become: no
+
   tasks:
     - name: Get AWX credentials from environment
       set_fact:
         awx_url: "{{ lookup('env', 'TOWER_HOST') }}"
         awx_user: "{{ lookup('env', 'TOWER_USERNAME') }}"
         awx_pass: "{{ lookup('env', 'TOWER_PASSWORD') }}"
-      when: 
-        - lookup('env', 'TOWER_HOST') | length > 0
-        - lookup('env', 'TOWER_USERNAME') | length > 0
-        - lookup('env', 'TOWER_PASSWORD') | length > 0
-
-      run_once: true
-      delegate_to: localhost
 
     - name: Lookup all hosts in this inventory
       uri:
@@ -322,11 +317,7 @@
         password: "{{ awx_pass }}"
         force_basic_auth: yes
         validate_certs: no
-        status_code: 200
       register: awx_hosts
-      when: awx_url is defined
-      run_once: true
-      delegate_to: localhost
 
     - name: Build AWX host mapping
       set_fact:
@@ -341,9 +332,24 @@
       when: 
         - awx_hosts is defined
         - awx_hosts.json.results | length > 0
-      run_once: true
-      delegate_to: localhost
-      delegate_facts: true
+
+    - name: Build list of hosts with zammad_info collected
+      set_fact:
+        hosts_with_facts: >-
+          {% set result = [] %}
+          {% for host in groups['zammad_servers'] %}
+            {% if hostvars[host].zammad_info is defined %}
+              {% set _ = result.append(host) %}
+            {% endif %}
+          {% endfor %}
+          {{ result }}
+
+    - name: Show hosts that will be updated
+      debug:
+        msg:
+          host: "{{ item }}"
+          awx_id: "{{ awx_host_map[item] | default('NOT FOUND') }}"
+      loop: "{{ groups['zammad_servers'] }}"
 
     - name: Update host variables in AWX for all zammad_servers
       loop: "{{ groups['zammad_servers'] }}"
@@ -366,27 +372,10 @@
             elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | default({})  | to_json }}
             postgresql_info: {{ hostvars[host_name].postgresql_info | default({}) | to_json }}
             kit_packages: {{ hostvars[host_name].kit_packages | default({}) | to_json }}
-      when:
-        - hostvars['localhost']['awx_url'] is defined
-        - host_name in hostvars['localhost']['awx_host_map']  
-        - hostvars[host_name] is defined        
       async: 30
       poll: 0
       register: awx_update_jobs
-      delegate_to: localhost
       ignore_errors: yes
-
-    - name: Wait for AWX updates to complete
-      async_status:
-        jid: "{{ item.ansible_job_id }}"
-      loop: "{{ awx_update_jobs.results | default([]) }}"
-      when: 
-        - item.ansible_job_id is defined
-        - not item.skipped | default(false)
-      register: awx_update_results
-      until: awx_update_results.finished
-      retries: 90
-      delay: 1
-      run_once: true
-      delegate_to: localhost
-      ignore_errors: yes
+      when:
+        - awx_url is defined
+        - host_name in awx_host_map
