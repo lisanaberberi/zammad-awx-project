@@ -154,7 +154,7 @@
               {% endif %}
             {% endfor %}
           {% endif %}
-          {{ all_pkgs | to_json }}
+          {{ all_pkgs }}
       when: zammad_version != 'NO_ZAMMAD'
 
     
