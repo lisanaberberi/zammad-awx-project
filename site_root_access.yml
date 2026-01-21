@@ -348,21 +348,28 @@
           awx_id: "{{ awx_host_map[item] | default('NOT FOUND') }}"
       loop: "{{ hosts_with_facts }}"
 
-    - name: Update host variables in AWX
+    - name: Update host variables in AWX for all zammad_servers
+      loop: "{{ hosts_with_facts }}"
+      loop_control:
+        loop_var: host_name
       uri:
-        url: "{{ awx_url }}/api/v2/hosts/{{ awx_host_map[item] }}/"
+        url: "{{ awx_url }}/api/v2/hosts/{{ awx_host_map[host_name] }}/"
         method: PATCH
         user: "{{ awx_user }}"
         password: "{{ awx_pass }}"
         force_basic_auth: yes
         validate_certs: no
+        timeout: 30
         body_format: json
         body:
-          variables:
-            zammad_info: "{{ hostvars[item].zammad_info }}"
-            redis_info: "{{ hostvars[item].redis_info }}"
-            elasticsearch_info: "{{ hostvars[item].elasticsearch_info }}"
-            postgresql_info: "{{ hostvars[item].postgresql_info }}"
-            kit_packages: "{{ hostvars[item].kit_packages }}"
-      loop: "{{ hosts_with_facts }}"
-      when: item in awx_host_map
+          variables: |
+            ---
+            zammad_info: {{ hostvars[host_name].zammad_info | default({}) | to_json }}
+            redis_info: {{ hostvars[host_name].redis_info | default({}) | to_json }}
+            elasticsearch_info: {{ hostvars[host_name].elasticsearch_info | default({})  | to_json }}
+            postgresql_info: {{ hostvars[host_name].postgresql_info | default({}) | to_json }}
+            kit_packages: {{ hostvars[host_name].kit_packages | default({}) | to_json }}
+      async: 30
+      poll: 0
+      register: awx_update_jobs
+      ignore_errors: yes
