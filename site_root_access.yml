@@ -296,7 +296,7 @@
 # Play 3: Push Facts to AWX Inventory
 # ======================================
 - name: Push collected facts to AWX inventory
-  hosts: zammad_root_servers
+  hosts: localhost
   gather_facts: no
   connection: local
   become: no
@@ -311,8 +311,7 @@
         - lookup('env', 'TOWER_USERNAME') | length > 0
         - lookup('env', 'TOWER_PASSWORD') | length > 0
 
-      run_once: true
-      delegate_to: localhost
+      #run_once: true
 
     - name: Lookup all hosts in this inventory
       uri:
@@ -325,8 +324,8 @@
         status_code: 200
       register: awx_hosts
       when: awx_url is defined
-      run_once: true
-      delegate_to: localhost
+      #run_once: true
+
 
     - name: Build AWX host mapping
       set_fact:
@@ -341,26 +340,25 @@
       when: 
         - awx_hosts is defined
         - awx_hosts.json.results | length > 0
-      run_once: true
-      delegate_to: localhost
-      delegate_facts: true
+      #run_once: true
 
-    - name: Build list of hosts that actually have zammad_info collected
+    - name: Build list of hosts with zammad_info collected
       set_fact:
         hosts_with_facts: >-
           {{
-            groups['zammad_servers'] 
-            | select('in', hostvars) 
-            | select('match', '^.*$')
-            | map('extract', hostvars)
-            | selectattr('zammad_info', 'defined')
-            | map(attribute='inventory_hostname')
+            groups['zammad_servers']
+            | select('in', hostvars)
+            | select('extract', hostvars, 'zammad_info')
             | list
           }}
-      run_once: true
-      delegate_to: localhost
-      delegate_facts: true
 
+    - name: Show hosts that will be updated
+      debug:
+        msg:
+          host: "{{ item }}"
+          awx_id: "{{ awx_host_map[item] | default('NOT FOUND') }}"
+      loop: "{{ hosts_with_facts }}"
+      
     - name: Update host variables in AWX for all zammad_servers
       loop: "{{ hostvars['localhost']['hosts_with_facts'] }}"
       loop_control:
@@ -389,7 +387,6 @@
       async: 30
       poll: 0
       register: awx_update_jobs
-      delegate_to: localhost
       ignore_errors: yes
 
     - name: Wait for AWX updates to complete
@@ -403,6 +400,4 @@
       until: awx_update_results.finished
       retries: 90
       delay: 1
-      run_once: true
-      delegate_to: localhost
       ignore_errors: yes
