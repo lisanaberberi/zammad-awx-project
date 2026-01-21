@@ -329,6 +329,9 @@
               | zip(awx_hosts.json.results | map(attribute='id'))
             )
           }}
+      when: 
+        - awx_hosts is defined
+        - awx_hosts.json.results | length > 0
 
     - name: Build list of hosts with zammad_info collected
       set_fact:
@@ -373,3 +376,6 @@
       poll: 0
       register: awx_update_jobs
       ignore_errors: yes
+      when:
+        - awx_url is defined
+        - host_name in awx_host_map
