@@ -65,6 +65,16 @@
         label: "{{ item.id }}"
       when: existing_annotations.json is defined and existing_annotations.json | length > 0
 
+    - name: Extract Grafana hostname from URL
+      ansible.builtin.set_fact:
+        grafana_hostname: "{{ grafana_url | regex_replace('^https?://', '') | regex_replace('[:/].*$', '') }}"
+
+    - name: Reset annotation auto-increment
+      ansible.builtin.shell: |
+        sqlite3 /var/lib/grafana/grafana.db "DELETE FROM sqlite_sequence WHERE name = 'annotation';"
+      become: yes
+      delegate_to: "{{ grafana_hostname }}"
+
     # -----------------------------
     # 3️⃣ Query AWX inventory hosts
     # -----------------------------
