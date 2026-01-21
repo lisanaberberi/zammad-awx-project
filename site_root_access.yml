@@ -346,10 +346,10 @@
         msg:
           host: "{{ item }}"
           awx_id: "{{ awx_host_map[item] | default('NOT FOUND') }}"
-      loop: "{{ hosts_with_facts }}"
+      loop: "{{ groups['zammad_servers'] }}"
 
     - name: Update host variables in AWX for all zammad_servers
-      loop: "{{ hosts_with_facts }}"
+      loop: "{{ groups['zammad_servers'] }}"
       loop_control:
         loop_var: host_name
       uri:
