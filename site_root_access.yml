@@ -296,7 +296,7 @@
 # Play 3: Push Facts to AWX Inventory
 # ======================================
 - name: Push collected facts to AWX inventory
-  hosts: localhost
+  hosts: zammad_root_servers
   gather_facts: no
   connection: local
   become: no
