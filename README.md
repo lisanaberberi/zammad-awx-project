@@ -42,12 +42,17 @@ kubectl get nodes
 The operator automates the complex setup of AWX (database migrations, task runners, and web services).
 
 ## Create the namespace
+```bash
 kubectl create namespace awx
+```
 
 ## Setup installation directory
+``` bash
 mkdir -p ~/awx-install && cd ~/awx-install
+```
 
 ## Create kustomization.yaml
+``` yml
 cat <<EOF > kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
@@ -60,9 +65,11 @@ images:
 
 namespace: awx
 EOF
-
+```
 ## Apply the operator deployment
+``` bash
 kubectl apply -k .
+```
 
 # Deploying the AWX Instance
 
